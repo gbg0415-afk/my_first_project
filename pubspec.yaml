@@ -35,7 +35,7 @@ dependencies:
   provider: ^6.1.1
   shared_preferences: ^2.2.2
   device_info_plus: ^12.3.0
-  flutter_windowmanager: any # للأمان ومنع التصوير
+  screen_protector: ^1.5.1 # للأمان ومنع التصوير
   
   # مكتبات الفيديو والخطوط (الجديدة لكودك)
   video_player: ^2.8.1
