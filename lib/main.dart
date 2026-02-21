@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:flutter_windowmanager/flutter_windowmanager.dart'; // Android only
+import 'package:screen_protector/screen_protector.dart'; // Android only
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -338,7 +338,7 @@ void main() async {
   // Security: Prevent Screen Recording (Android)
   try {
     if (Platform.isAndroid) {
-      await FlutterWindowManager.addFlags(FlutterWindowManager.FLAG_SECURE);
+      await ScreenProtector.preventScreenshotOn();
     }
   } catch (e) {
     print("Security Flag Error: $e");
@@ -1062,7 +1062,7 @@ class LectureDetailScreen extends StatelessWidget {
                 else
                   Container(
                     height: 200,
-                    alignment: Center,
+                    alignment: Alignment.center,
                     color: Colors.grey.shade100,
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
