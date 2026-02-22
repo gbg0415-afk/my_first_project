@@ -45,6 +45,7 @@ dependencies:
 
   # مكتبات Firebase (التي أعددناها)
   firebase_core: ^4.4.0
+  firebase_auth:
   cloud_firestore: ^6.1.2
   lucide_icons: ^0.257.0
 
