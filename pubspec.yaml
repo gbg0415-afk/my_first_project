@@ -34,19 +34,20 @@ dependencies:
   # المكتبات الأساسية
   provider: ^6.1.1
   shared_preferences: ^2.2.2
-  device_info_plus: ^12.3.0
+  device_info_plus: ^10.1.0
   screen_protector: ^1.5.1 # للأمان ومنع التصوير
   
-  # مكتبات الفيديو والخطوط (الجديدة لكودك)
+  # مكتبات الفيديو والخطوط
   video_player: ^2.8.1
   chewie: ^1.7.1
   url_launcher: ^6.2.1
-  google_fonts: ^8.0.2
+  google_fonts: ^6.1.0
 
-  # مكتبات Firebase (التي أعددناها)
-  firebase_core: ^4.4.0
-  firebase_auth:
-  cloud_firestore: ^6.1.2
+  # مكتبات Firebase (النسخ المستقرة جداً لمنع الانهيار)
+  firebase_core: 2.24.2
+  firebase_auth: 4.15.3
+  cloud_firestore: 4.13.6
+  
   lucide_icons: ^0.257.0
 
 dev_dependencies:
