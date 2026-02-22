@@ -10,6 +10,7 @@ import 'package:chewie/chewie.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart'; // إضافة فايربيز
+import 'package:firebase_auth/firebase_auth.dart' hide User; // إضافة المصادقة الحقيقية (مع إخفاء تعارض الأسماء)
 
 // ==========================================
 // MODELS (Types)
@@ -98,7 +99,7 @@ class Lecture {
 }
 
 // ==========================================
-// MOCK DATA
+// MOCK DATA (للعرض فقط)
 // ==========================================
 
 final List<Department> mockDepartments = [
@@ -147,16 +148,14 @@ final List<Lecture> mockLectures = [
         id: 'part_1_1',
         title: 'Setup Guide',
         type: PartType.VIDEO,
-        url:
-            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
         source: VideoSource.DIRECT,
       ),
       LecturePart(
         id: 'part_1_2',
         title: 'Course Syllabus',
         type: PartType.PDF,
-        url:
-            'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
+        url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
       ),
     ],
   ),
@@ -171,23 +170,10 @@ final List<Lecture> mockLectures = [
         id: 'part_2_1',
         title: 'Provider Deep Dive',
         type: PartType.VIDEO,
-        url:
-            'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+        url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
         source: VideoSource.DIRECT,
       ),
     ],
-  ),
-];
-
-List<User> mockUsers = [
-  User(
-    id: 'user_admin',
-    name: 'Admin User',
-    phone: '1234567890',
-    password: 'password123',
-    departmentId: 'dept_cs',
-    allowedCourseIds: ['course_1', 'course_2', 'course_3'],
-    deviceId: '',
   ),
 ];
 
@@ -217,47 +203,56 @@ class AuthProvider with ChangeNotifier {
     return 'unknown_platform_id';
   }
 
+  // تسجيل الدخول الحقيقي بفايربيز
   Future<bool> login(String identifier, String password) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
-    // Simulate Network Delay
-    await Future.delayed(const Duration(seconds: 1));
-
     try {
-      final foundUser = mockUsers.firstWhere(
-        (u) =>
-            (u.phone == identifier || u.name == identifier) &&
-            u.password == password,
-        orElse: () => throw Exception('Invalid credentials'),
+      // فايربيز يحتاج إيميل، فنقوم بتحويل رقم الهاتف إلى إيميل أكاديمي
+      String email = identifier.contains('@') ? identifier : "$identifier@smacademy.com";
+
+      // الاتصال بسيرفرات فايربيز
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
       );
 
       final currentDeviceId = await _getDeviceId();
 
-      // MEDACE STYLE SECURITY CHECK
-      if (foundUser.deviceId != null && foundUser.deviceId!.isNotEmpty) {
-        if (foundUser.deviceId != currentDeviceId) {
-          throw Exception('Security Alert: Account locked to another device.');
-        }
-      } else {
-        // First time login: Bind Device
-        print("Binding Device ID: $currentDeviceId to ${foundUser.name}");
-        foundUser.deviceId = currentDeviceId;
-      }
+      // إنشاء بيانات المستخدم الجلسة الحالية
+      _user = User(
+        id: FirebaseAuth.instance.currentUser!.uid,
+        name: "طالب الأكاديمية", // يمكن جلبه لاحقاً من Firestore
+        phone: identifier,
+        password: password, 
+        departmentId: 'dept_cs',
+        allowedCourseIds: ['course_1', 'course_2', 'course_3'],
+        deviceId: currentDeviceId,
+      );
 
-      _user = foundUser;
       _isLoading = false;
       notifyListeners();
       return true;
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'user-not-found' || e.code == 'wrong-password' || e.code == 'invalid-credential') {
+        _error = "رقم الهاتف أو كلمة المرور غير صحيحة";
+      } else {
+        _error = "حدث خطأ في الاتصال: ${e.message}";
+      }
+      _isLoading = false;
+      notifyListeners();
+      return false;
     } catch (e) {
-      _error = e.toString().replaceAll("Exception: ", "");
+      _error = "خطأ غير متوقع: $e";
       _isLoading = false;
       notifyListeners();
       return false;
     }
   }
 
+  // إنشاء حساب حقيقي بفايربيز
   Future<bool> register(
     String name,
     String phone,
@@ -268,39 +263,52 @@ class AuthProvider with ChangeNotifier {
     _error = null;
     notifyListeners();
 
-    await Future.delayed(const Duration(seconds: 1));
+    try {
+      // تحويل رقم الهاتف إلى إيميل لكي يقبله فايربيز
+      String email = "$phone@smacademy.com";
 
-    if (mockUsers.any((u) => u.phone == phone)) {
-      _error = 'Phone number already registered';
+      // إرسال البيانات إلى Firebase
+      UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      final currentDeviceId = await _getDeviceId();
+
+      _user = User(
+        id: userCredential.user!.uid,
+        name: name,
+        phone: phone,
+        password: password,
+        departmentId: deptId,
+        allowedCourseIds: ['course_1'],
+        deviceId: currentDeviceId,
+      );
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'email-already-in-use') {
+        _error = "هذا الرقم مسجل مسبقاً";
+      } else if (e.code == 'weak-password') {
+        _error = "كلمة المرور ضعيفة جداً";
+      } else {
+        _error = "فشل التسجيل: ${e.message}";
+      }
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _error = "خطأ غير متوقع: $e";
       _isLoading = false;
       notifyListeners();
       return false;
     }
-
-    final newUser = User(
-      id: 'user_${DateTime.now().millisecondsSinceEpoch}',
-      name: name,
-      phone: phone,
-      password: password,
-      departmentId: deptId,
-      allowedCourseIds: ['course_1'], // Default assignment
-      deviceId: null, // Will bind on login
-    );
-
-    mockUsers.add(newUser);
-    // Auto login after signup
-    _user = newUser;
-
-    // Bind device immediately on signup/first auto-login
-    final currentDeviceId = await _getDeviceId();
-    newUser.deviceId = currentDeviceId;
-
-    _isLoading = false;
-    notifyListeners();
-    return true;
   }
 
-  void logout() {
+  void logout() async {
+    await FirebaseAuth.instance.signOut(); // تسجيل الخروج الحقيقي
     _user = null;
     notifyListeners();
   }
@@ -312,7 +320,6 @@ class AuthProvider with ChangeNotifier {
     if (_user != null) {
       _user!.name = name;
       _user!.phone = phone;
-      // In real app, update DB here
     }
     _isLoading = false;
     notifyListeners();
@@ -326,14 +333,12 @@ class AuthProvider with ChangeNotifier {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // >>>>>> هنا قمنا بربط فايربيز لكي لا يضيع مجهودك <<<<<<
   try {
     await Firebase.initializeApp();
     print("--- Firebase Connected Successfully ---");
   } catch (e) {
     print("--- Firebase Error: $e ---");
   }
-  // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
   // Security: Prevent Screen Recording (Android)
   try {
