@@ -590,16 +590,16 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       _ytController = YoutubePlayerController(
         initialVideoId: videoId,
         flags: const YoutubePlayerFlags(
-          autoPlay: true, 
+          autoPlay: false, // تعطيل التشغيل التلقائي لتخطي حظر التابلت
           mute: false, 
-          useHybridComposition: true, // ضروري جداً للأجهزة الحديثة ليمنع التحميل اللانهائي
+          forceHD: false,  // تعطيل الـ HD التلقائي لتسريع الاستجابة
         ),
       );
     }
+    setState(() => isLoading = false);
   }
 
   Future<void> _initStandardPlayer() async {
-    // خوارزمية ذكية لتحويل رابط جوجل درايف إلى رابط مباشر
     String finalUrl = widget.videoUrl;
     if (finalUrl.contains("drive.google.com")) {
       RegExp regExp = RegExp(r'id=([a-zA-Z0-9_-]+)|d\/([a-zA-Z0-9_-]+)');
@@ -632,28 +632,27 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black, // إزالة الـ AppBar ليكون المشغل بكامل الشاشة
+      backgroundColor: Colors.black, 
       body: SafeArea(
         child: Stack(
           children: [
             Center(
-              child: isYoutube && _ytController != null
-                ? YoutubePlayerBuilder(
-                    player: YoutubePlayer(
-                      controller: _ytController!,
-                      showVideoProgressIndicator: true,
-                    ),
-                    builder: (context, player) {
-                      return player;
-                    },
-                  )
-                : isLoading 
-                  ? const CircularProgressIndicator(color: Colors.orange)
+              child: isLoading 
+                ? const CircularProgressIndicator(color: Colors.orange)
+                : isYoutube && _ytController != null
+                  ? YoutubePlayerBuilder(
+                      player: YoutubePlayer(
+                        controller: _ytController!,
+                        showVideoProgressIndicator: true,
+                      ),
+                      builder: (context, player) {
+                        return player;
+                      },
+                    )
                   : _chewieController != null
                     ? Chewie(controller: _chewieController!)
                     : const Text("عذراً، لا يمكن تشغيل هذا الفيديو.", style: TextStyle(color: Colors.white)),
             ),
-            // زر الخروج العائم
             Positioned(
               top: 10,
               right: 10,
