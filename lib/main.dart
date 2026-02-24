@@ -51,7 +51,6 @@ class AuthProvider with ChangeNotifier {
     _checkLoginStatus();
   }
 
-  // دالة لتحديث البيانات في الواجهة بعد أي تعديل
   Future<void> refreshUserData() async {
     await _checkLoginStatus();
   }
@@ -63,12 +62,27 @@ class AuthProvider with ChangeNotifier {
       
       if (userDoc.exists) {
         final data = userDoc.data()!;
+        
+        // جلب اسم القسم الحقيقي من مجموعة departments
+        String deptName = "غير محدد";
+        try {
+          final deptDoc = await FirebaseFirestore.instance
+              .collection('departments')
+              .doc(data['departmentId'])
+              .get();
+          if (deptDoc.exists) {
+            deptName = deptDoc.data()?['name'] ?? "قسم غير معروف";
+          }
+        } catch (e) {
+          print("Error fetching dept name: $e");
+        }
+
         _user = User(
           id: firebaseUser.uid,
           name: data['name'] ?? "طالب الأكاديمية",
           phone: data['phone'] ?? "",
           password: "", 
-          departmentId: data['departmentId'] ?? "",
+          departmentId: deptName, // هنا سيظهر الاسم (تخدير/تمريض) بدلاً من الرمز
           deviceId: data['deviceId'] ?? "",
           email: data['email'] ?? "",
           telegram: data['telegram'] ?? "",
@@ -139,7 +153,7 @@ class AuthProvider with ChangeNotifier {
         'uid': userCredential.user!.uid,
         'name': name,
         'phone': phone,
-        'departmentId': deptId,
+        'departmentId': deptId, // نحفظ الرمز هنا لربط العلاقات
         'deviceId': currentDeviceId,
         'email': "",
         'telegram': "",
