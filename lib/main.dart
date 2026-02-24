@@ -578,33 +578,38 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     isYoutube = widget.videoUrl.contains("youtube.com") || widget.videoUrl.contains("youtu.be");
     
     if (isYoutube) {
-      String? videoId = YoutubePlayer.convertUrlToId(widget.videoUrl);
-      if (videoId != null) {
-        _ytController = YoutubePlayerController(
-          initialVideoId: videoId,
-          flags: const YoutubePlayerFlags(autoPlay: true, mute: false, forceHD: true),
-        );
-      }
-      setState(() => isLoading = false);
+      _initYoutube();
     } else {
       _initStandardPlayer();
     }
   }
 
-  String _parseUrl(String url) {
-    if (url.contains("drive.google.com")) {
-      RegExp regExp = RegExp(r'id=([a-zA-Z0-9_-]+)|d\/([a-zA-Z0-9_-]+)');
-      Match? match = regExp.firstMatch(url);
-      String? id = match?.group(1) ?? match?.group(2);
-      if (id != null) {
-        return "https://docs.google.com/uc?export=download&id=$id";
-      }
+  void _initYoutube() {
+    String? videoId = YoutubePlayer.convertUrlToId(widget.videoUrl);
+    if (videoId != null) {
+      _ytController = YoutubePlayerController(
+        initialVideoId: videoId,
+        flags: const YoutubePlayerFlags(
+          autoPlay: true, 
+          mute: false, 
+          useHybridComposition: true, // ضروري جداً للأجهزة الحديثة ليمنع التحميل اللانهائي
+        ),
+      );
     }
-    return url;
   }
 
   Future<void> _initStandardPlayer() async {
-    String finalUrl = _parseUrl(widget.videoUrl);
+    // خوارزمية ذكية لتحويل رابط جوجل درايف إلى رابط مباشر
+    String finalUrl = widget.videoUrl;
+    if (finalUrl.contains("drive.google.com")) {
+      RegExp regExp = RegExp(r'id=([a-zA-Z0-9_-]+)|d\/([a-zA-Z0-9_-]+)');
+      Match? match = regExp.firstMatch(finalUrl);
+      String? id = match?.group(1) ?? match?.group(2);
+      if (id != null) {
+        finalUrl = "https://docs.google.com/uc?export=download&id=$id";
+      }
+    }
+
     _vpController = VideoPlayerController.networkUrl(Uri.parse(finalUrl));
     
     try {
@@ -618,10 +623,52 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         materialProgressColors: ChewieProgressColors(playedColor: Colors.orange, handleColor: Colors.orange, backgroundColor: Colors.grey, bufferedColor: Colors.white54),
       );
     } catch (e) {
-      print("Video Player Error: $e");
+      print("Error initializing standard player: $e");
     }
     
-    setState(() => isLoading = false);
+    if (mounted) setState(() => isLoading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black, // إزالة الـ AppBar ليكون المشغل بكامل الشاشة
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Center(
+              child: isYoutube && _ytController != null
+                ? YoutubePlayerBuilder(
+                    player: YoutubePlayer(
+                      controller: _ytController!,
+                      showVideoProgressIndicator: true,
+                    ),
+                    builder: (context, player) {
+                      return player;
+                    },
+                  )
+                : isLoading 
+                  ? const CircularProgressIndicator(color: Colors.orange)
+                  : _chewieController != null
+                    ? Chewie(controller: _chewieController!)
+                    : const Text("عذراً، لا يمكن تشغيل هذا الفيديو.", style: TextStyle(color: Colors.white)),
+            ),
+            // زر الخروج العائم
+            Positioned(
+              top: 10,
+              right: 10,
+              child: Container(
+                decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white, size: 24),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -630,58 +677,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     _vpController?.dispose();
     _chewieController?.dispose();
     super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (isLoading) {
-      return const Scaffold(backgroundColor: Colors.black, body: Center(child: CircularProgressIndicator(color: Colors.orange)));
-    }
-
-    if (isYoutube && _ytController != null) {
-      return YoutubePlayerBuilder(
-        player: YoutubePlayer(controller: _ytController!, showVideoProgressIndicator: true),
-        builder: (context, player) {
-          return Scaffold(
-            backgroundColor: Colors.black,
-            body: SafeArea(
-              child: Stack(
-                children: [
-                  Center(child: player),
-                  Positioned(top: 10, right: 10, child: _closeBtn(context)),
-                ],
-              ),
-            ),
-          );
-        },
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Center(
-              child: _chewieController != null
-                ? Chewie(controller: _chewieController!)
-                : const Text("عذراً، لا يمكن تشغيل هذا الفيديو.", style: TextStyle(color: Colors.white)),
-            ),
-            Positioned(top: 10, right: 10, child: _closeBtn(context)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _closeBtn(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
-      child: IconButton(
-        icon: const Icon(Icons.close, color: Colors.white, size: 24),
-        onPressed: () => Navigator.pop(context),
-      ),
-    );
   }
 }
 
