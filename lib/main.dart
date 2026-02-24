@@ -18,9 +18,11 @@ class User {
   String phone;
   final String password;
   final String departmentId;
+  String departmentName;
   String? deviceId;
   String? email;
   String? telegram;
+  List<String> allowedCourseIds;
 
   User({
     required this.id,
@@ -28,9 +30,11 @@ class User {
     required this.phone,
     required this.password,
     required this.departmentId,
+    required this.departmentName,
     this.deviceId,
     this.email,
     this.telegram,
+    required this.allowedCourseIds,
   });
 }
 
@@ -41,10 +45,12 @@ class User {
 class AuthProvider with ChangeNotifier {
   User? _user;
   bool _isLoading = false;
+  bool _isInitializing = true; // لمنع وميض شاشة الدخول
   String? _error;
 
   User? get user => _user;
   bool get isLoading => _isLoading;
+  bool get isInitializing => _isInitializing;
   String? get error => _error;
 
   AuthProvider() {
@@ -63,13 +69,9 @@ class AuthProvider with ChangeNotifier {
       if (userDoc.exists) {
         final data = userDoc.data()!;
         
-        // جلب اسم القسم الحقيقي من مجموعة departments
         String deptName = "غير محدد";
         try {
-          final deptDoc = await FirebaseFirestore.instance
-              .collection('departments')
-              .doc(data['departmentId'])
-              .get();
+          final deptDoc = await FirebaseFirestore.instance.collection('departments').doc(data['departmentId']).get();
           if (deptDoc.exists) {
             deptName = deptDoc.data()?['name'] ?? "قسم غير معروف";
           }
@@ -82,14 +84,20 @@ class AuthProvider with ChangeNotifier {
           name: data['name'] ?? "طالب الأكاديمية",
           phone: data['phone'] ?? "",
           password: "", 
-          departmentId: deptName, // هنا سيظهر الاسم (تخدير/تمريض) بدلاً من الرمز
+          departmentId: data['departmentId'] ?? "",
+          departmentName: deptName,
           deviceId: data['deviceId'] ?? "",
           email: data['email'] ?? "",
           telegram: data['telegram'] ?? "",
+          allowedCourseIds: List<String>.from(data['allowedCourseIds'] ?? []),
         );
       }
-      notifyListeners();
+    } else {
+      _user = null;
     }
+    
+    _isInitializing = false;
+    notifyListeners();
   }
 
   Future<String> _getDeviceId() async {
@@ -124,13 +132,18 @@ class AuthProvider with ChangeNotifier {
           _isLoading = false;
           notifyListeners();
           return false;
+        } else if (savedDeviceId == "") {
+          // تسجيل الجهاز الجديد إذا كان الحساب مفكوك القفل
+          await FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid).update({
+            'deviceId': currentDeviceId
+          });
         }
       }
 
       await _checkLoginStatus();
       _isLoading = false;
       return true;
-    } on FirebaseAuthException catch (e) {
+    } catch (e) {
       _error = "خطأ في تسجيل الدخول: تأكد من البيانات";
       _isLoading = false;
       notifyListeners();
@@ -153,17 +166,18 @@ class AuthProvider with ChangeNotifier {
         'uid': userCredential.user!.uid,
         'name': name,
         'phone': phone,
-        'departmentId': deptId, // نحفظ الرمز هنا لربط العلاقات
+        'departmentId': deptId, 
         'deviceId': currentDeviceId,
         'email': "",
         'telegram': "",
+        'allowedCourseIds': [],
         'createdAt': FieldValue.serverTimestamp(),
       });
 
       await _checkLoginStatus();
       _isLoading = false;
       return true;
-    } on FirebaseAuthException catch (e) {
+    } catch (e) {
       _error = "فشل التسجيل، قد يكون الرقم مستخدماً";
       _isLoading = false;
       notifyListeners();
@@ -215,11 +229,20 @@ class SMAcademyApp extends StatelessWidget {
       theme: ThemeData(
         primaryColor: const Color(0xFF001F3F), 
         scaffoldBackgroundColor: const Color(0xFFF9FAFB),
-        textTheme: GoogleFonts.interTextTheme(),
+        textTheme: GoogleFonts.cairoTextTheme(), // استخدام خط عربي جميل
         appBarTheme: const AppBarTheme(backgroundColor: Color(0xFF001F3F), foregroundColor: Colors.white),
       ),
+      builder: (context, child) {
+        return Directionality(textDirection: TextDirection.rtl, child: child!);
+      },
       home: Consumer<AuthProvider>(
         builder: (context, auth, _) {
+          if (auth.isInitializing) {
+            return const Scaffold(
+              backgroundColor: Color(0xFF001F3F),
+              body: Center(child: CircularProgressIndicator(color: Colors.white)),
+            );
+          }
           return auth.user != null ? const MainScreen() : const LoginScreen();
         },
       ),
@@ -227,6 +250,111 @@ class SMAcademyApp extends StatelessWidget {
   }
 }
 
+// ==========================================
+// MAIN SCREEN (الكورسات)
+// ==========================================
+class MainScreen extends StatelessWidget {
+  const MainScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = Provider.of<AuthProvider>(context).user!;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("SM Academy", style: TextStyle(fontWeight: FontWeight.bold)),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => Provider.of<AuthProvider>(context, listen: false).refreshUserData(),
+          ),
+          GestureDetector(
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: CircleAvatar(
+                radius: 16,
+                backgroundColor: Colors.white24,
+                child: Icon(Icons.person, color: Colors.white, size: 20),
+              ),
+            ),
+          ),
+        ],
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Text("مرحباً بك، ${user.name}", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF001F3F))),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20.0),
+            child: Text("كورساتي المتاحة:", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: FutureBuilder<QuerySnapshot>(
+              future: FirebaseFirestore.instance
+                  .collection('courses')
+                  .where('departmentId', isEqualTo: user.departmentId)
+                  .get(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(child: Text("لا توجد كورسات متاحة في قسمك حالياً."));
+                }
+
+                // فلترة الكورسات المسموحة للطالب فقط
+                var allCourses = snapshot.data!.docs;
+                var allowedCourses = allCourses.where((c) => user.allowedCourseIds.contains(c.id)).toList();
+
+                if (allowedCourses.isEmpty) {
+                  return const Center(child: Text("لم يتم تفعيل أي كورس لك بعد. يرجى التواصل مع الإدارة."));
+                }
+
+                return ListView.builder(
+                  padding: const EdgeInsets.all(20),
+                  itemCount: allowedCourses.length,
+                  itemBuilder: (context, index) {
+                    var courseData = allowedCourses[index].data() as Map<String, dynamic>;
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 15),
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.all(15),
+                        leading: Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(color: const Color(0xFF001F3F).withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                          child: const Icon(Icons.play_lesson, color: Color(0xFF001F3F)),
+                        ),
+                        title: Text(courseData['title'] ?? 'كورس بدون عنوان', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: const Text("اضغط للدخول إلى المحاضرات", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                        onTap: () {
+                          // سيتم برمجة صفحة المحاضرات لاحقاً
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("سيتم فتح المحاضرات قريباً")));
+                        },
+                      ),
+                    );
+                  },
+                );
+              }
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==========================================
+// AUTH SCREENS
+// ==========================================
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
   @override
@@ -254,7 +382,7 @@ class _LoginScreenState extends State<LoginScreen> {
               children: [
                 const Icon(Icons.school, size: 80, color: Color(0xFF001F3F)),
                 const SizedBox(height: 16),
-                Text("SM Academy", textAlign: TextAlign.center, style: GoogleFonts.merriweather(fontSize: 28, fontWeight: FontWeight.bold, color: const Color(0xFF001F3F))),
+                const Text("SM Academy", textAlign: TextAlign.center, style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF001F3F))),
                 const SizedBox(height: 40),
                 if (auth.error != null) Text(auth.error!, style: const TextStyle(color: Colors.red), textAlign: TextAlign.center),
                 const SizedBox(height: 16),
@@ -303,12 +431,8 @@ class _SignupScreenState extends State<SignupScreen> {
       body: FutureBuilder<QuerySnapshot>(
         future: FirebaseFirestore.instance.collection('departments').get(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(child: Text("لا توجد أقسام متاحة حالياً."));
-          }
+          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("لا توجد أقسام متاحة حالياً."));
 
           var departments = snapshot.data!.docs;
 
@@ -358,49 +482,17 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 }
 
-class MainScreen extends StatelessWidget {
-  const MainScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("SM Academy"),
-        centerTitle: false,
-        actions: [
-          GestureDetector(
-            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              child: CircleAvatar(
-                radius: 18,
-                backgroundColor: Colors.white24,
-                child: Icon(Icons.person, color: Colors.white, size: 20),
-              ),
-            ),
-          ),
-        ],
-      ),
-      body: const Center(child: Text("سيتم جلب الكورسات من لوحة الويب قريباً", style: TextStyle(fontSize: 18))),
-    );
-  }
-}
-
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
-
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  
   Future<void> _updateData(String field, String newValue) async {
     final user = Provider.of<AuthProvider>(context, listen: false).user;
     if (user != null) {
-      await FirebaseFirestore.instance.collection('users').doc(user.id).update({
-        field: newValue,
-      });
+      await FirebaseFirestore.instance.collection('users').doc(user.id).update({field: newValue});
       Provider.of<AuthProvider>(context, listen: false).refreshUserData();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم التحديث بنجاح")));
     }
@@ -468,7 +560,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          const Center(child: CircleAvatar(radius: 50, child: Icon(Icons.person, size: 50))),
+          const Center(child: CircleAvatar(radius: 50, backgroundColor: Color(0xFF001F3F), child: Icon(Icons.person, size: 50, color: Colors.white))),
           const SizedBox(height: 20),
           
           _buildInfoItem("الاسم الكامل", user?.name ?? "", true, () => _showEditDialog("الاسم", "name", user?.name ?? "")),
@@ -477,7 +569,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _buildInfoItem("معرف تليجرام", (user?.telegram == null || user!.telegram!.isEmpty) ? "أضف @username" : user.telegram!, true, () => _showEditDialog("تليجرام", "telegram", user?.telegram ?? "")),
           
           const Divider(),
-          _buildInfoItem("القسم الأكاديمي", user?.departmentId ?? "", false, null),
+          _buildInfoItem("القسم الأكاديمي", user?.departmentName ?? "", false, null),
           const SizedBox(height: 20),
           
           ListTile(
