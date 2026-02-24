@@ -30,7 +30,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  
+
   provider: ^6.1.1
   shared_preferences: ^2.2.2
   device_info_plus: ^10.1.0
@@ -39,12 +39,12 @@ dependencies:
   chewie: ^1.7.1
   url_launcher: ^6.2.1
   google_fonts: ^6.1.0
-  
-  firebase_core: 2.24.2
-  firebase_auth: 4.15.3
-  cloud_firestore: 4.13.6
-  
   lucide_icons: ^0.257.0
+
+  # التحديث هنا لحل مشكلة الـ AggregateQuerySnapshot
+  firebase_core: ^2.27.0
+  firebase_auth: ^4.17.8
+  cloud_firestore: ^4.15.8
 
 dev_dependencies:
   flutter_test:
