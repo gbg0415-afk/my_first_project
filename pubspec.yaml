@@ -14,13 +14,13 @@ dependencies:
   # المكتبات الأساسية
   provider: ^6.1.1
   device_info_plus: ^10.1.0
-  screen_protector: ^2.1.0
+  screen_protector: ^1.5.1
   google_fonts: ^6.2.1
   cached_network_image: ^3.3.1
   url_launcher: ^6.2.1
   shared_preferences: ^2.2.2
 
-  # مكتبات الفيديو (تم حذف التكرار هنا)
+  # مكتبات الفيديو
   video_player: ^2.8.6
   chewie: ^1.8.1
   youtube_player_flutter: ^9.0.1
