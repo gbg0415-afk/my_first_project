@@ -465,7 +465,6 @@ class CourseLecturesScreen extends StatelessWidget {
                   subtitle: Text(lectureData['description'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis),
                   trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                   onTap: () {
-                    // الانتقال لصفحة تفاصيل المحاضرة بدلاً من الفيديو مباشرة
                     Navigator.push(context, MaterialPageRoute(
                       builder: (_) => LectureDetailsScreen(lectureData: lectureData)
                     ));
@@ -513,7 +512,6 @@ class LectureDetailsScreen extends StatelessWidget {
                 Text(lectureData['description'] ?? 'لا يوجد وصف حالياً لهذه المحاضرة.', style: const TextStyle(color: Colors.grey, fontSize: 14)),
                 const SizedBox(height: 30),
                 
-                // زر ملف الـ PDF
                 if (lectureData['pdfUrl'] != null && lectureData['pdfUrl'].toString().isNotEmpty)
                   ElevatedButton.icon(
                     onPressed: () {
@@ -593,7 +591,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     }
   }
 
-  // خوارزمية ذكية لتحويل رابط جوجل درايف إلى رابط بث مباشر وتخبئته
   String _parseUrl(String url) {
     if (url.contains("drive.google.com")) {
       RegExp regExp = RegExp(r'id=([a-zA-Z0-9_-]+)|d\/([a-zA-Z0-9_-]+)');
@@ -615,7 +612,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       _chewieController = ChewieController(
         videoPlayerController: _vpController!,
         autoPlay: true,
-        fullScreenByDefault: true, // شاشة كاملة تلقائياً
+        fullScreenByDefault: true, 
         allowFullScreen: true,
         aspectRatio: _vpController!.value.aspectRatio,
         materialProgressColors: ChewieProgressColors(playedColor: Colors.orange, handleColor: Colors.orange, backgroundColor: Colors.grey, bufferedColor: Colors.white54),
@@ -637,34 +634,52 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Scaffold(backgroundColor: Colors.black, body: Center(child: CircularProgressIndicator(color: Colors.orange)));
+    }
+
+    if (isYoutube && _ytController != null) {
+      return YoutubePlayerBuilder(
+        player: YoutubePlayer(controller: _ytController!, showVideoProgressIndicator: true),
+        builder: (context, player) {
+          return Scaffold(
+            backgroundColor: Colors.black,
+            body: SafeArea(
+              child: Stack(
+                children: [
+                  Center(child: player),
+                  Positioned(top: 10, right: 10, child: _closeBtn(context)),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    }
+
     return Scaffold(
-      backgroundColor: Colors.black, // إزالة الشريط الأسود (AppBar) تماماً
+      backgroundColor: Colors.black,
       body: SafeArea(
         child: Stack(
           children: [
             Center(
-              child: isLoading 
-                ? const CircularProgressIndicator(color: Colors.orange)
-                : isYoutube && _ytController != null
-                  ? YoutubePlayer(controller: _ytController!, showVideoProgressIndicator: true)
-                  : _chewieController != null
-                    ? Chewie(controller: _chewieController!)
-                    : const Text("عذراً، لا يمكن تشغيل هذا الفيديو.", style: TextStyle(color: Colors.white)),
+              child: _chewieController != null
+                ? Chewie(controller: _chewieController!)
+                : const Text("عذراً، لا يمكن تشغيل هذا الفيديو.", style: TextStyle(color: Colors.white)),
             ),
-            // زر الخروج العائم
-            Positioned(
-              top: 10,
-              right: 10,
-              child: Container(
-                decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
-                child: IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white, size: 24),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ),
-            ),
+            Positioned(top: 10, right: 10, child: _closeBtn(context)),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _closeBtn(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+      child: IconButton(
+        icon: const Icon(Icons.close, color: Colors.white, size: 24),
+        onPressed: () => Navigator.pop(context),
       ),
     );
   }
