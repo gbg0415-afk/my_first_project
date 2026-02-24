@@ -302,7 +302,7 @@ class _SignupScreenState extends State<SignupScreen> {
 }
 
 // ==========================================
-// MAIN SCREEN (UI الجميل والكورسات)
+// MAIN SCREEN (Dashboard)
 // ==========================================
 class MainScreen extends StatelessWidget {
   const MainScreen({super.key});
@@ -429,7 +429,7 @@ class MainScreen extends StatelessWidget {
 }
 
 // ==========================================
-// LECTURES SCREEN (المحاضرات)
+// COURSE LECTURES LIST SCREEN
 // ==========================================
 class CourseLecturesScreen extends StatelessWidget {
   final String courseId; final String courseTitle;
@@ -453,24 +453,22 @@ class CourseLecturesScreen extends StatelessWidget {
             itemCount: lectures.length,
             itemBuilder: (context, index) {
               var lectureData = lectures[index].data() as Map<String, dynamic>;
-              String videoUrl = lectureData['videoUrl'] ?? lectureData['url'] ?? '';
-
+              
               return Card(
                 margin: const EdgeInsets.only(bottom: 15),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                 elevation: 3,
                 child: ListTile(
                   contentPadding: const EdgeInsets.all(15),
-                  leading: Container(width: 50, height: 50, decoration: BoxDecoration(color: const Color(0xFF001F3F).withOpacity(0.1), borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.play_arrow, color: Color(0xFF001F3F), size: 30)),
+                  leading: Container(width: 50, height: 50, decoration: BoxDecoration(color: const Color(0xFF001F3F).withOpacity(0.1), borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.folder, color: Color(0xFF001F3F), size: 30)),
                   title: Text(lectureData['title'] ?? 'محاضرة', style: const TextStyle(fontWeight: FontWeight.bold)),
                   subtitle: Text(lectureData['description'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis),
                   trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                   onTap: () {
-                    if (videoUrl.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("رابط الفيديو غير متوفر")));
-                      return;
-                    }
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => VideoPlayerScreen(videoUrl: videoUrl, title: lectureData['title'] ?? 'محاضرة')));
+                    // الانتقال لصفحة تفاصيل المحاضرة بدلاً من الفيديو مباشرة
+                    Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => LectureDetailsScreen(lectureData: lectureData)
+                    ));
                   },
                 ),
               );
@@ -483,64 +481,190 @@ class CourseLecturesScreen extends StatelessWidget {
 }
 
 // ==========================================
-// VIDEO PLAYER SCREEN (Bunny.net & YouTube)
+// LECTURE DETAILS SCREEN (Preparation Screen)
+// ==========================================
+class LectureDetailsScreen extends StatelessWidget {
+  final Map<String, dynamic> lectureData;
+
+  const LectureDetailsScreen({super.key, required this.lectureData});
+
+  @override
+  Widget build(BuildContext context) {
+    List parts = lectureData['parts'] ?? [];
+
+    return Scaffold(
+      appBar: AppBar(title: Text(lectureData['title'] ?? 'تفاصيل المحاضرة')),
+      body: Column(
+        children: [
+          Container(
+            height: 200,
+            width: double.infinity,
+            color: const Color(0xFF001F3F),
+            child: const Center(
+              child: Icon(Icons.library_books, size: 80, color: Colors.white24),
+            ),
+          ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                Text(lectureData['title'] ?? '', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF001F3F))),
+                const SizedBox(height: 10),
+                Text(lectureData['description'] ?? 'لا يوجد وصف حالياً لهذه المحاضرة.', style: const TextStyle(color: Colors.grey, fontSize: 14)),
+                const SizedBox(height: 30),
+                
+                // زر ملف الـ PDF
+                if (lectureData['pdfUrl'] != null && lectureData['pdfUrl'].toString().isNotEmpty)
+                  ElevatedButton.icon(
+                    onPressed: () {
+                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("سيتم فتح الملف قريباً")));
+                    }, 
+                    icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
+                    label: const Text("تحميل ملزمة المحاضرة (PDF)", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], padding: const EdgeInsets.all(15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
+                  ),
+                
+                const SizedBox(height: 30),
+                const Text("أجزاء الفيديو المتاحة:", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF001F3F))),
+                const SizedBox(height: 10),
+                
+                if (parts.isEmpty)
+                  const Center(child: Padding(padding: EdgeInsets.all(20.0), child: Text("لا توجد فيديوهات مضافة لهذه المحاضرة.")))
+                else
+                  ...parts.map((part) => Card(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    elevation: 1,
+                    child: ListTile(
+                      leading: const CircleAvatar(backgroundColor: Color(0xFF001F3F), child: Icon(Icons.play_arrow, color: Colors.white)),
+                      title: Text(part['title'] ?? 'جزء غير معنون', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                      onTap: () {
+                        Navigator.push(context, MaterialPageRoute(
+                          builder: (_) => VideoPlayerScreen(
+                            videoUrl: part['url'] ?? '', 
+                            title: part['title'] ?? 'عرض الفيديو'
+                          )
+                        ));
+                      },
+                    ),
+                  )).toList(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==========================================
+// VIDEO PLAYER SCREEN (YouTube, Bunny, G-Drive)
 // ==========================================
 class VideoPlayerScreen extends StatefulWidget {
   final String videoUrl; final String title;
   const VideoPlayerScreen({super.key, required this.videoUrl, required this.title});
   @override State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
 }
+
 class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
-  VideoPlayerController? _videoPlayerController;
-  ChewieController? _chewieController;
   YoutubePlayerController? _ytController;
-  bool isYoutube = false; bool isLoading = true;
+  VideoPlayerController? _vpController;
+  ChewieController? _chewieController;
+  bool isYoutube = false;
+  bool isLoading = true;
 
   @override
   void initState() {
     super.initState();
     isYoutube = widget.videoUrl.contains("youtube.com") || widget.videoUrl.contains("youtu.be");
+    
     if (isYoutube) {
-      final videoId = YoutubePlayer.convertUrlToId(widget.videoUrl);
+      String? videoId = YoutubePlayer.convertUrlToId(widget.videoUrl);
       if (videoId != null) {
-        _ytController = YoutubePlayerController(initialVideoId: videoId, flags: const YoutubePlayerFlags(autoPlay: true, mute: false));
-        setState(() => isLoading = false);
+        _ytController = YoutubePlayerController(
+          initialVideoId: videoId,
+          flags: const YoutubePlayerFlags(autoPlay: true, mute: false, forceHD: true),
+        );
       }
+      setState(() => isLoading = false);
     } else {
-      _initializeBunnyPlayer();
+      _initStandardPlayer();
     }
   }
 
-  Future<void> _initializeBunnyPlayer() async {
-    _videoPlayerController = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
-    await _videoPlayerController!.initialize();
-    _chewieController = ChewieController(
-      videoPlayerController: _videoPlayerController!,
-      autoPlay: true, looping: false,
-      materialProgressColors: ChewieProgressColors(playedColor: Colors.orange, handleColor: Colors.orange, backgroundColor: Colors.grey, bufferedColor: Colors.white54),
-    );
+  // خوارزمية ذكية لتحويل رابط جوجل درايف إلى رابط بث مباشر وتخبئته
+  String _parseUrl(String url) {
+    if (url.contains("drive.google.com")) {
+      RegExp regExp = RegExp(r'id=([a-zA-Z0-9_-]+)|d\/([a-zA-Z0-9_-]+)');
+      Match? match = regExp.firstMatch(url);
+      String? id = match?.group(1) ?? match?.group(2);
+      if (id != null) {
+        return "https://docs.google.com/uc?export=download&id=$id";
+      }
+    }
+    return url;
+  }
+
+  Future<void> _initStandardPlayer() async {
+    String finalUrl = _parseUrl(widget.videoUrl);
+    _vpController = VideoPlayerController.networkUrl(Uri.parse(finalUrl));
+    
+    try {
+      await _vpController!.initialize();
+      _chewieController = ChewieController(
+        videoPlayerController: _vpController!,
+        autoPlay: true,
+        fullScreenByDefault: true, // شاشة كاملة تلقائياً
+        allowFullScreen: true,
+        aspectRatio: _vpController!.value.aspectRatio,
+        materialProgressColors: ChewieProgressColors(playedColor: Colors.orange, handleColor: Colors.orange, backgroundColor: Colors.grey, bufferedColor: Colors.white54),
+      );
+    } catch (e) {
+      print("Video Player Error: $e");
+    }
+    
     setState(() => isLoading = false);
   }
 
   @override
   void dispose() {
-    _videoPlayerController?.dispose(); _chewieController?.dispose(); _ytController?.dispose();
+    _ytController?.dispose();
+    _vpController?.dispose();
+    _chewieController?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(title: Text(widget.title), backgroundColor: Colors.black),
-      body: Center(
-        child: isLoading 
-          ? const CircularProgressIndicator(color: Colors.orange)
-          : isYoutube && _ytController != null
-            ? YoutubePlayer(controller: _ytController!, showVideoProgressIndicator: true)
-            : _chewieController != null && _chewieController!.videoPlayerController.value.isInitialized
-              ? Chewie(controller: _chewieController!)
-              : const Text("خطأ في تحميل الفيديو", style: TextStyle(color: Colors.white)),
+      backgroundColor: Colors.black, // إزالة الشريط الأسود (AppBar) تماماً
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Center(
+              child: isLoading 
+                ? const CircularProgressIndicator(color: Colors.orange)
+                : isYoutube && _ytController != null
+                  ? YoutubePlayer(controller: _ytController!, showVideoProgressIndicator: true)
+                  : _chewieController != null
+                    ? Chewie(controller: _chewieController!)
+                    : const Text("عذراً، لا يمكن تشغيل هذا الفيديو.", style: TextStyle(color: Colors.white)),
+            ),
+            // زر الخروج العائم
+            Positioned(
+              top: 10,
+              right: 10,
+              child: Container(
+                decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white, size: 24),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
