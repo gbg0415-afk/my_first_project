@@ -6,6 +6,7 @@ import 'package:screen_protector/screen_protector.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart'; 
 import 'package:firebase_auth/firebase_auth.dart' hide User; 
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 // ==========================================
 // MODELS (Types)
@@ -54,23 +55,27 @@ class AuthProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
-  // أضفنا هذا ليعمل تلقائياً عند فتح التطبيق
   AuthProvider() {
     _checkLoginStatus();
   }
 
-  // هذه الدالة تفحص جلسة فايربيز المحفوظة في الجهاز
   Future<void> _checkLoginStatus() async {
     final firebaseUser = FirebaseAuth.instance.currentUser;
     if (firebaseUser != null) {
-      _user = User(
-        id: firebaseUser.uid,
-        name: "طالب الأكاديمية", // سنجلب الاسم الحقيقي لاحقاً من Firestore
-        phone: firebaseUser.email?.replaceAll('@smacademy.com', '') ?? "",
-        password: "", 
-        departmentId: 'dept_cs',
-        deviceId: await _getDeviceId(),
-      );
+      // جلب بيانات المستخدم من Firestore للتأكد من الاسم والقسم
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(firebaseUser.uid).get();
+      
+      if (userDoc.exists) {
+        final data = userDoc.data()!;
+        _user = User(
+          id: firebaseUser.uid,
+          name: data['name'] ?? "طالب الأكاديمية",
+          phone: data['phone'] ?? "",
+          password: "", 
+          departmentId: data['departmentId'] ?? "",
+          deviceId: data['deviceId'] ?? "",
+        );
+      }
       notifyListeners();
     }
   }
@@ -94,10 +99,24 @@ class AuthProvider with ChangeNotifier {
 
     try {
       String email = identifier.contains('@') ? identifier : "$identifier@smacademy.com";
-      await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: password);
+      UserCredential userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: password);
       
-      await _checkLoginStatus(); // تحديث بيانات المستخدم بعد الدخول
-      
+      // فحص رقم الجهاز عند تسجيل الدخول (قفل الحساب)
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid).get();
+      if (userDoc.exists) {
+        String savedDeviceId = userDoc.data()?['deviceId'] ?? "";
+        String currentDeviceId = await _getDeviceId();
+
+        if (savedDeviceId != "" && savedDeviceId != currentDeviceId) {
+          await FirebaseAuth.instance.signOut();
+          _error = "هذا الحساب مرتبط بجهاز آخر. يرجى التواصل مع الإدارة.";
+          _isLoading = false;
+          notifyListeners();
+          return false;
+        }
+      }
+
+      await _checkLoginStatus();
       _isLoading = false;
       return true;
     } on FirebaseAuthException catch (e) {
@@ -115,10 +134,22 @@ class AuthProvider with ChangeNotifier {
 
     try {
       String email = "$phone@smacademy.com";
-      await FirebaseAuth.instance.createUserWithEmailAndPassword(email: email, password: password);
+      String currentDeviceId = await _getDeviceId();
+
+      // 1. إنشاء الحساب في Authentication
+      UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(email: email, password: password);
       
-      await _checkLoginStatus(); // تحديث بيانات المستخدم بعد التسجيل
-      
+      // 2. حفظ البيانات في Firestore (هنا الإضافة الجديدة)
+      await FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid).set({
+        'uid': userCredential.user!.uid,
+        'name': name,
+        'phone': phone,
+        'departmentId': deptId,
+        'deviceId': currentDeviceId, // ربط الحساب بهذا الجهاز فوراً
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      await _checkLoginStatus();
       _isLoading = false;
       return true;
     } on FirebaseAuthException catch (e) {
@@ -254,50 +285,63 @@ class _SignupScreenState extends State<SignupScreen> {
   final _formKey = GlobalKey<FormState>();
 
   @override
-  void initState() {
-    super.initState();
-    if (mockDepartments.isNotEmpty) _selectedDeptId = mockDepartments[0].id;
-  }
-
-  @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
     return Scaffold(
-      appBar: AppBar(title: const Text("Registration")),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextFormField(controller: _nameController, decoration: const InputDecoration(labelText: "Full Name", border: OutlineInputBorder()), validator: (v) => v!.isEmpty ? "Required" : null),
-              const SizedBox(height: 16),
-              TextFormField(controller: _phoneController, decoration: const InputDecoration(labelText: "Phone Number", border: OutlineInputBorder()), keyboardType: TextInputType.phone, validator: (v) => v!.isEmpty ? "Required" : null),
-              const SizedBox(height: 16),
-              TextFormField(controller: _passwordController, obscureText: true, decoration: const InputDecoration(labelText: "Password", border: OutlineInputBorder()), validator: (v) => v!.isEmpty ? "Required" : null),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                initialValue: _selectedDeptId,
-                decoration: const InputDecoration(labelText: "Department", border: OutlineInputBorder()),
-                items: mockDepartments.map((d) => DropdownMenuItem(value: d.id, child: Text(d.name))).toList(),
-                onChanged: (val) => setState(() => _selectedDeptId = val),
+      appBar: AppBar(title: const Text("إنشاء حساب")),
+      // FutureBuilder لجلب الأقسام من Firestore
+      body: FutureBuilder<QuerySnapshot>(
+        future: FirebaseFirestore.instance.collection('departments').get(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(child: Text("لا توجد أقسام متاحة حالياً. قم بإضافتها من لوحة الويب."));
+          }
+
+          var departments = snapshot.data!.docs;
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextFormField(controller: _nameController, decoration: const InputDecoration(labelText: "الاسم الكامل", border: OutlineInputBorder())),
+                  const SizedBox(height: 16),
+                  TextFormField(controller: _phoneController, decoration: const InputDecoration(labelText: "رقم الهاتف", border: OutlineInputBorder()), keyboardType: TextInputType.phone),
+                  const SizedBox(height: 16),
+                  TextFormField(controller: _passwordController, obscureText: true, decoration: const InputDecoration(labelText: "كلمة المرور", border: OutlineInputBorder())),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: _selectedDeptId,
+                    hint: const Text("اختر القسم"),
+                    decoration: const InputDecoration(border: OutlineInputBorder()),
+                    // تحويل البيانات القادمة من السيرفر إلى قائمة منسدلة
+                    items: departments.map((doc) {
+                      Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+                      return DropdownMenuItem(value: doc.id, child: Text(data['name'] ?? 'قسم غير معروف'));
+                    }).toList(),
+                    onChanged: (val) => setState(() => _selectedDeptId = val),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: auth.isLoading ? null : () async {
+                      if (_formKey.currentState!.validate() && _selectedDeptId != null) {
+                        final success = await auth.register(_nameController.text, _phoneController.text, _passwordController.text, _selectedDeptId!);
+                        if (success && mounted) Navigator.pop(context);
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF001F3F), padding: const EdgeInsets.symmetric(vertical: 16)),
+                    child: auth.isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text("إنشاء حساب", style: TextStyle(color: Colors.white)),
+                  ),
+                ],
               ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: auth.isLoading ? null : () async {
-                  if (_formKey.currentState!.validate() && _selectedDeptId != null) {
-                    final success = await auth.register(_nameController.text, _phoneController.text, _passwordController.text, _selectedDeptId!);
-                    if (success && mounted) Navigator.pop(context);
-                  }
-                },
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF001F3F), padding: const EdgeInsets.symmetric(vertical: 16)),
-                child: auth.isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text("CREATE ACCOUNT", style: TextStyle(color: Colors.white)),
-              ),
-              if (auth.error != null) Text(auth.error!, style: const TextStyle(color: Colors.red), textAlign: TextAlign.center),
-            ],
-          ),
-        ),
+            ),
+          );
+        }
       ),
     );
   }
