@@ -1,4 +1,4 @@
-package com.example.sm_academy
+package sm.academy
 
 import io.flutter.embedding.android.FlutterActivity
 
