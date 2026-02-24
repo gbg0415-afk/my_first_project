@@ -360,7 +360,16 @@ class MainScreen extends StatelessWidget {
               if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const SliverToBoxAdapter(child: Center(child: Text("لا توجد كورسات متاحة.")));
 
               var allowedCourses = snapshot.data!.docs.where((c) => user.allowedCourseIds.contains(c.id)).toList();
-              if (allowedCourses.isEmpty) return const SliverToBoxAdapter(child: Center(child: Padding(padding: EdgeInsets.all(20), child: Text("لم يتم تفعيل أي كورس لك بعد. تواصل مع الإدارة.", style: TextStyle(fontSize: 16, color: Colors.grey))))));
+              if (allowedCourses.isEmpty) {
+                return const SliverToBoxAdapter(
+                  child: Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(20), 
+                      child: Text("لم يتم تفعيل أي كورس لك بعد. تواصل مع الإدارة.", style: TextStyle(fontSize: 16, color: Colors.grey))
+                    )
+                  )
+                );
+              }
 
               return SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
