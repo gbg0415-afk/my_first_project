@@ -357,50 +357,63 @@ class MainScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text("SM Academy"),
+        centerTitle: false,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () => Provider.of<AuthProvider>(context, listen: false).logout(),
+          // أيقونة الملف الشخصي
+          GestureDetector(
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: CircleAvatar(
+                radius: 18,
+                backgroundColor: Colors.white24,
+                child: Icon(Icons.person, color: Colors.white, size: 20),
+              ),
+            ),
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // بطاقة معلومات الطالب
-            Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-              child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  children: [
-                    const CircleAvatar(radius: 40, child: Icon(Icons.person, size: 40)),
-                    const SizedBox(height: 10),
-                    Text(user?.name ?? "طالب الأكاديمية", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                    Text(user?.phone ?? "", style: const TextStyle(color: Colors.grey)),
-                    const Divider(),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text("القسم:", style: TextStyle(fontWeight: FontWeight.bold)),
-                        Text(user?.departmentId ?? "غير محدد"),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 30),
-            const Text("كورساتي", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            const Expanded(
-              child: Center(child: Text("سيتم جلب الكورسات من لوحة الويب قريباً")),
-            ),
-          ],
-        ),
+      body: const Center(child: Text("مرحباً بك في كورساتك")),
+    );
+  }
+}
+
+class ProfileScreen extends StatelessWidget {
+  const ProfileScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = Provider.of<AuthProvider>(context).user;
+    
+    return Scaffold(
+      appBar: AppBar(title: const Text("ملفي الشخصي")),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          const Center(child: CircleAvatar(radius: 50, child: Icon(Icons.person, size: 50))),
+          const SizedBox(height: 20),
+          _buildInfoItem("الاسم", user?.name ?? ""),
+          _buildInfoItem("رقم الهاتف", user?.phone ?? ""),
+          _buildInfoItem("القسم", user?.departmentId ?? ""),
+          const SizedBox(height: 30),
+          ElevatedButton(
+            onPressed: () { /* هنا كود التعديل مستقبلاً */ },
+            child: const Text("تعديل البيانات"),
+          ),
+          TextButton(
+            onPressed: () => Provider.of<AuthProvider>(context, listen: false).logout(),
+            child: const Text("تسجيل الخروج", style: TextStyle(color: Colors.red)),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildInfoItem(String label, String value) {
+    return ListTile(
+      title: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+      subtitle: Text(value, style: const TextStyle(fontSize: 16)),
+      trailing: const Icon(Icons.edit, size: 16),
     );
   }
 }
