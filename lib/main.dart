@@ -12,12 +12,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 // MODELS (Types)
 // ==========================================
 
-class Department {
-  final String id;
-  final String name;
-  Department({required this.id, required this.name});
-}
-
 class User {
   final String id;
   String name;
@@ -25,6 +19,8 @@ class User {
   final String password;
   final String departmentId;
   String? deviceId;
+  String? email;
+  String? telegram;
 
   User({
     required this.id,
@@ -33,14 +29,10 @@ class User {
     required this.password,
     required this.departmentId,
     this.deviceId,
+    this.email,
+    this.telegram,
   });
 }
-
-// الأقسام المؤقتة (سنربطها لاحقاً بلوحة الأدمن)
-final List<Department> mockDepartments = [
-  Department(id: 'dept_cs', name: 'Computer Science'),
-  Department(id: 'dept_med', name: 'Medical'),
-];
 
 // ==========================================
 // AUTH PROVIDER
@@ -59,10 +51,14 @@ class AuthProvider with ChangeNotifier {
     _checkLoginStatus();
   }
 
+  // دالة لتحديث البيانات في الواجهة بعد أي تعديل
+  Future<void> refreshUserData() async {
+    await _checkLoginStatus();
+  }
+
   Future<void> _checkLoginStatus() async {
     final firebaseUser = FirebaseAuth.instance.currentUser;
     if (firebaseUser != null) {
-      // جلب بيانات المستخدم من Firestore للتأكد من الاسم والقسم
       final userDoc = await FirebaseFirestore.instance.collection('users').doc(firebaseUser.uid).get();
       
       if (userDoc.exists) {
@@ -74,6 +70,8 @@ class AuthProvider with ChangeNotifier {
           password: "", 
           departmentId: data['departmentId'] ?? "",
           deviceId: data['deviceId'] ?? "",
+          email: data['email'] ?? "",
+          telegram: data['telegram'] ?? "",
         );
       }
       notifyListeners();
@@ -101,7 +99,6 @@ class AuthProvider with ChangeNotifier {
       String email = identifier.contains('@') ? identifier : "$identifier@smacademy.com";
       UserCredential userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: password);
       
-      // فحص رقم الجهاز عند تسجيل الدخول (قفل الحساب)
       final userDoc = await FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid).get();
       if (userDoc.exists) {
         String savedDeviceId = userDoc.data()?['deviceId'] ?? "";
@@ -120,7 +117,7 @@ class AuthProvider with ChangeNotifier {
       _isLoading = false;
       return true;
     } on FirebaseAuthException catch (e) {
-      _error = "خطأ في تسجيل الدخول: ${e.message}";
+      _error = "خطأ في تسجيل الدخول: تأكد من البيانات";
       _isLoading = false;
       notifyListeners();
       return false;
@@ -136,16 +133,16 @@ class AuthProvider with ChangeNotifier {
       String email = "$phone@smacademy.com";
       String currentDeviceId = await _getDeviceId();
 
-      // 1. إنشاء الحساب في Authentication
       UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(email: email, password: password);
       
-      // 2. حفظ البيانات في Firestore (هنا الإضافة الجديدة)
       await FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid).set({
         'uid': userCredential.user!.uid,
         'name': name,
         'phone': phone,
         'departmentId': deptId,
-        'deviceId': currentDeviceId, // ربط الحساب بهذا الجهاز فوراً
+        'deviceId': currentDeviceId,
+        'email': "",
+        'telegram': "",
         'createdAt': FieldValue.serverTimestamp(),
       });
 
@@ -153,7 +150,7 @@ class AuthProvider with ChangeNotifier {
       _isLoading = false;
       return true;
     } on FirebaseAuthException catch (e) {
-      _error = "فشل التسجيل: ${e.message}";
+      _error = "فشل التسجيل، قد يكون الرقم مستخدماً";
       _isLoading = false;
       notifyListeners();
       return false;
@@ -247,20 +244,20 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 40),
                 if (auth.error != null) Text(auth.error!, style: const TextStyle(color: Colors.red), textAlign: TextAlign.center),
                 const SizedBox(height: 16),
-                TextFormField(controller: _identifierController, decoration: const InputDecoration(labelText: "Username or Phone", border: OutlineInputBorder()), validator: (v) => v!.isEmpty ? "Required" : null),
+                TextFormField(controller: _identifierController, decoration: const InputDecoration(labelText: "رقم الهاتف", border: OutlineInputBorder()), validator: (v) => v!.isEmpty ? "مطلوب" : null),
                 const SizedBox(height: 16),
-                TextFormField(controller: _passwordController, obscureText: true, decoration: const InputDecoration(labelText: "Password", border: OutlineInputBorder()), validator: (v) => v!.isEmpty ? "Required" : null),
+                TextFormField(controller: _passwordController, obscureText: true, decoration: const InputDecoration(labelText: "كلمة المرور", border: OutlineInputBorder()), validator: (v) => v!.isEmpty ? "مطلوب" : null),
                 const SizedBox(height: 24),
                 ElevatedButton(
                   onPressed: auth.isLoading ? null : () {
                     if (_formKey.currentState!.validate()) auth.login(_identifierController.text, _passwordController.text);
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF001F3F), padding: const EdgeInsets.symmetric(vertical: 16)),
-                  child: auth.isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text("LOGIN", style: TextStyle(color: Colors.white)),
+                  child: auth.isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text("تسجيل الدخول", style: TextStyle(color: Colors.white)),
                 ),
                 TextButton(
                   onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SignupScreen())),
-                  child: const Text("Don't have an account? Register"),
+                  child: const Text("لا تملك حساباً؟ أنشئ حساباً جديداً"),
                 ),
               ],
             ),
@@ -289,7 +286,6 @@ class _SignupScreenState extends State<SignupScreen> {
     final auth = Provider.of<AuthProvider>(context);
     return Scaffold(
       appBar: AppBar(title: const Text("إنشاء حساب")),
-      // FutureBuilder لجلب الأقسام من Firestore
       body: FutureBuilder<QuerySnapshot>(
         future: FirebaseFirestore.instance.collection('departments').get(),
         builder: (context, snapshot) {
@@ -297,7 +293,7 @@ class _SignupScreenState extends State<SignupScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(child: Text("لا توجد أقسام متاحة حالياً. قم بإضافتها من لوحة الويب."));
+            return const Center(child: Text("لا توجد أقسام متاحة حالياً."));
           }
 
           var departments = snapshot.data!.docs;
@@ -309,22 +305,22 @@ class _SignupScreenState extends State<SignupScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  TextFormField(controller: _nameController, decoration: const InputDecoration(labelText: "الاسم الكامل", border: OutlineInputBorder())),
+                  TextFormField(controller: _nameController, decoration: const InputDecoration(labelText: "الاسم الكامل", border: OutlineInputBorder()), validator: (v) => v!.isEmpty ? "مطلوب" : null),
                   const SizedBox(height: 16),
-                  TextFormField(controller: _phoneController, decoration: const InputDecoration(labelText: "رقم الهاتف", border: OutlineInputBorder()), keyboardType: TextInputType.phone),
+                  TextFormField(controller: _phoneController, decoration: const InputDecoration(labelText: "رقم الهاتف", border: OutlineInputBorder()), keyboardType: TextInputType.phone, validator: (v) => v!.isEmpty ? "مطلوب" : null),
                   const SizedBox(height: 16),
-                  TextFormField(controller: _passwordController, obscureText: true, decoration: const InputDecoration(labelText: "كلمة المرور", border: OutlineInputBorder())),
+                  TextFormField(controller: _passwordController, obscureText: true, decoration: const InputDecoration(labelText: "كلمة المرور", border: OutlineInputBorder()), validator: (v) => v!.isEmpty ? "مطلوب" : null),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
                     value: _selectedDeptId,
                     hint: const Text("اختر القسم"),
                     decoration: const InputDecoration(border: OutlineInputBorder()),
-                    // تحويل البيانات القادمة من السيرفر إلى قائمة منسدلة
                     items: departments.map((doc) {
                       Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
                       return DropdownMenuItem(value: doc.id, child: Text(data['name'] ?? 'قسم غير معروف'));
                     }).toList(),
                     onChanged: (val) => setState(() => _selectedDeptId = val),
+                    validator: (v) => v == null ? "يجب اختيار القسم" : null,
                   ),
                   const SizedBox(height: 24),
                   ElevatedButton(
@@ -337,6 +333,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF001F3F), padding: const EdgeInsets.symmetric(vertical: 16)),
                     child: auth.isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text("إنشاء حساب", style: TextStyle(color: Colors.white)),
                   ),
+                  if (auth.error != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(auth.error!, style: const TextStyle(color: Colors.red), textAlign: TextAlign.center)),
                 ],
               ),
             ),
@@ -352,14 +349,11 @@ class MainScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final user = Provider.of<AuthProvider>(context).user;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text("SM Academy"),
         centerTitle: false,
         actions: [
-          // أيقونة الملف الشخصي
           GestureDetector(
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
             child: const Padding(
@@ -373,18 +367,88 @@ class MainScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: const Center(child: Text("مرحباً بك في كورساتك")),
+      body: const Center(child: Text("سيتم جلب الكورسات من لوحة الويب قريباً", style: TextStyle(fontSize: 18))),
     );
   }
 }
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  
+  Future<void> _updateData(String field, String newValue) async {
+    final user = Provider.of<AuthProvider>(context, listen: false).user;
+    if (user != null) {
+      await FirebaseFirestore.instance.collection('users').doc(user.id).update({
+        field: newValue,
+      });
+      Provider.of<AuthProvider>(context, listen: false).refreshUserData();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم التحديث بنجاح")));
+    }
+  }
+
+  void _showEditDialog(String title, String field, String currentValue) {
+    TextEditingController controller = TextEditingController(text: currentValue);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("تعديل $title"),
+        content: TextField(controller: controller, decoration: InputDecoration(hintText: "أدخل $title الجديد")),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.isNotEmpty) {
+                _updateData(field, controller.text);
+                Navigator.pop(context);
+              }
+            },
+            child: const Text("حفظ"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _updatePassword() {
+    TextEditingController controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("تغيير كلمة المرور"),
+        content: TextField(controller: controller, obscureText: true, decoration: const InputDecoration(hintText: "أدخل كلمة المرور الجديدة")),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
+          ElevatedButton(
+            onPressed: () async {
+              if (controller.text.length >= 6) {
+                try {
+                  await FirebaseAuth.instance.currentUser?.updatePassword(controller.text);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم تغيير كلمة المرور بنجاح")));
+                  Navigator.pop(context);
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("حدث خطأ، يرجى تسجيل الدخول مجدداً والمحاولة")));
+                }
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("كلمة المرور يجب أن تكون 6 أحرف على الأقل")));
+              }
+            },
+            child: const Text("حفظ"),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).user;
-    
+
     return Scaffold(
       appBar: AppBar(title: const Text("ملفي الشخصي")),
       body: ListView(
@@ -392,28 +456,42 @@ class ProfileScreen extends StatelessWidget {
         children: [
           const Center(child: CircleAvatar(radius: 50, child: Icon(Icons.person, size: 50))),
           const SizedBox(height: 20),
-          _buildInfoItem("الاسم", user?.name ?? ""),
-          _buildInfoItem("رقم الهاتف", user?.phone ?? ""),
-          _buildInfoItem("القسم", user?.departmentId ?? ""),
-          const SizedBox(height: 30),
-          ElevatedButton(
-            onPressed: () { /* هنا كود التعديل مستقبلاً */ },
-            child: const Text("تعديل البيانات"),
+          
+          _buildInfoItem("الاسم الكامل", user?.name ?? "", true, () => _showEditDialog("الاسم", "name", user?.name ?? "")),
+          _buildInfoItem("رقم الهاتف", user?.phone ?? "", true, () => _showEditDialog("رقم الهاتف", "phone", user?.phone ?? "")),
+          _buildInfoItem("البريد الإلكتروني", (user?.email == null || user!.email!.isEmpty) ? "أضف بريد إلكتروني" : user.email!, true, () => _showEditDialog("البريد", "email", user?.email ?? "")),
+          _buildInfoItem("معرف تليجرام", (user?.telegram == null || user!.telegram!.isEmpty) ? "أضف @username" : user.telegram!, true, () => _showEditDialog("تليجرام", "telegram", user?.telegram ?? "")),
+          
+          const Divider(),
+          _buildInfoItem("القسم الأكاديمي", user?.departmentId ?? "", false, null),
+          const SizedBox(height: 20),
+          
+          ListTile(
+            leading: const Icon(Icons.lock_outline, color: Colors.orange),
+            title: const Text("تغيير كلمة المرور"),
+            trailing: const Icon(Icons.edit, size: 18),
+            onTap: _updatePassword,
           ),
+
+          const SizedBox(height: 30),
           TextButton(
-            onPressed: () => Provider.of<AuthProvider>(context, listen: false).logout(),
-            child: const Text("تسجيل الخروج", style: TextStyle(color: Colors.red)),
+            onPressed: () {
+              Navigator.pop(context);
+              Provider.of<AuthProvider>(context, listen: false).logout();
+            },
+            child: const Text("تسجيل الخروج", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16)),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildInfoItem(String label, String value) {
+  Widget _buildInfoItem(String label, String value, bool isEditable, VoidCallback? onTap) {
     return ListTile(
-      title: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-      subtitle: Text(value, style: const TextStyle(fontSize: 16)),
-      trailing: const Icon(Icons.edit, size: 16),
+      title: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
+      subtitle: Text(value, style: const TextStyle(fontSize: 16, color: Colors.black)),
+      trailing: isEditable ? const Icon(Icons.edit, size: 18, color: Color(0xFF001F3F)) : null,
+      onTap: isEditable ? onTap : null,
     );
   }
 }
