@@ -349,16 +349,58 @@ class _SignupScreenState extends State<SignupScreen> {
 
 class MainScreen extends StatelessWidget {
   const MainScreen({super.key});
+
   @override
   Widget build(BuildContext context) {
+    final user = Provider.of<AuthProvider>(context).user;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text("SM Academy - Home"),
+        title: const Text("SM Academy"),
         actions: [
-          IconButton(icon: const Icon(Icons.logout), onPressed: () => Provider.of<AuthProvider>(context, listen: false).logout()),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () => Provider.of<AuthProvider>(context, listen: false).logout(),
+          ),
         ],
       ),
-      body: const Center(child: Text("تم تسجيل الدخول بنجاح! هنا ستظهر الكورسات لاحقاً.", style: TextStyle(fontSize: 18))),
+      body: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // بطاقة معلومات الطالب
+            Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  children: [
+                    const CircleAvatar(radius: 40, child: Icon(Icons.person, size: 40)),
+                    const SizedBox(height: 10),
+                    Text(user?.name ?? "طالب الأكاديمية", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                    Text(user?.phone ?? "", style: const TextStyle(color: Colors.grey)),
+                    const Divider(),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text("القسم:", style: TextStyle(fontWeight: FontWeight.bold)),
+                        Text(user?.departmentId ?? "غير محدد"),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 30),
+            const Text("كورساتي", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const Expanded(
+              child: Center(child: Text("سيتم جلب الكورسات من لوحة الويب قريباً")),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
