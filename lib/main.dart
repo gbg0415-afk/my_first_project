@@ -560,7 +560,8 @@ class LectureDetailsScreen extends StatelessWidget {
 // VIDEO PLAYER SCREEN (YouTube, Bunny, G-Drive)
 // ==========================================
 class VideoPlayerScreen extends StatefulWidget {
-  final String videoUrl; final String title;
+  final String videoUrl; 
+  final String title;
   const VideoPlayerScreen({super.key, required this.videoUrl, required this.title});
   @override State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
 }
@@ -590,9 +591,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       _ytController = YoutubePlayerController(
         initialVideoId: videoId,
         flags: const YoutubePlayerFlags(
-          autoPlay: false, // تعطيل التشغيل التلقائي لتخطي حظر التابلت
-          mute: false, 
-          forceHD: false,  // تعطيل الـ HD التلقائي لتسريع الاستجابة
+          autoPlay: true, // التشغيل التلقائي مفعل كما طلبت
+          mute: false,
+          hideThumbnail: true, // مهم جداً لمنع تعليق التحميل
         ),
       );
     }
@@ -632,7 +633,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black, 
+      backgroundColor: Colors.black, // لضمان عدم وجود حواف بيضاء
       body: SafeArea(
         child: Stack(
           children: [
@@ -640,14 +641,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
               child: isLoading 
                 ? const CircularProgressIndicator(color: Colors.orange)
                 : isYoutube && _ytController != null
-                  ? YoutubePlayerBuilder(
-                      player: YoutubePlayer(
-                        controller: _ytController!,
-                        showVideoProgressIndicator: true,
-                      ),
-                      builder: (context, player) {
-                        return player;
-                      },
+                  // تشغيل يوتيوب مباشرة داخل الواجهة بدون غلاف معقد
+                  ? YoutubePlayer(
+                      controller: _ytController!,
+                      showVideoProgressIndicator: true,
+                      progressIndicatorColor: Colors.orange,
                     )
                   : _chewieController != null
                     ? Chewie(controller: _chewieController!)
