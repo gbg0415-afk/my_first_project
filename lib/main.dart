@@ -54,6 +54,27 @@ class AuthProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
+  // أضفنا هذا ليعمل تلقائياً عند فتح التطبيق
+  AuthProvider() {
+    _checkLoginStatus();
+  }
+
+  // هذه الدالة تفحص جلسة فايربيز المحفوظة في الجهاز
+  Future<void> _checkLoginStatus() async {
+    final firebaseUser = FirebaseAuth.instance.currentUser;
+    if (firebaseUser != null) {
+      _user = User(
+        id: firebaseUser.uid,
+        name: "طالب الأكاديمية", // سنجلب الاسم الحقيقي لاحقاً من Firestore
+        phone: firebaseUser.email?.replaceAll('@smacademy.com', '') ?? "",
+        password: "", 
+        departmentId: 'dept_cs',
+        deviceId: await _getDeviceId(),
+      );
+      notifyListeners();
+    }
+  }
+
   Future<String> _getDeviceId() async {
     final DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
     if (Platform.isAndroid) {
@@ -75,17 +96,9 @@ class AuthProvider with ChangeNotifier {
       String email = identifier.contains('@') ? identifier : "$identifier@smacademy.com";
       await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: password);
       
-      _user = User(
-        id: FirebaseAuth.instance.currentUser!.uid,
-        name: "طالب الأكاديمية", 
-        phone: identifier,
-        password: password, 
-        departmentId: 'dept_cs',
-        deviceId: await _getDeviceId(),
-      );
-
+      await _checkLoginStatus(); // تحديث بيانات المستخدم بعد الدخول
+      
       _isLoading = false;
-      notifyListeners();
       return true;
     } on FirebaseAuthException catch (e) {
       _error = "خطأ في تسجيل الدخول: ${e.message}";
@@ -102,19 +115,11 @@ class AuthProvider with ChangeNotifier {
 
     try {
       String email = "$phone@smacademy.com";
-      UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(email: email, password: password);
+      await FirebaseAuth.instance.createUserWithEmailAndPassword(email: email, password: password);
       
-      _user = User(
-        id: userCredential.user!.uid,
-        name: name,
-        phone: phone,
-        password: password,
-        departmentId: deptId,
-        deviceId: await _getDeviceId(),
-      );
-
+      await _checkLoginStatus(); // تحديث بيانات المستخدم بعد التسجيل
+      
       _isLoading = false;
-      notifyListeners();
       return true;
     } on FirebaseAuthException catch (e) {
       _error = "فشل التسجيل: ${e.message}";
