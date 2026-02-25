@@ -480,7 +480,7 @@ class CourseLecturesScreen extends StatelessWidget {
 }
 
 // ==========================================
-// LECTURE DETAILS SCREEN (Preparation Screen)
+// LECTURE DETAILS SCREEN 
 // ==========================================
 class LectureDetailsScreen extends StatelessWidget {
   final Map<String, dynamic> lectureData;
@@ -557,7 +557,7 @@ class LectureDetailsScreen extends StatelessWidget {
 }
 
 // ==========================================
-// VIDEO PLAYER SCREEN (المشغل النهائي والمستقر)
+// VIDEO PLAYER SCREEN (تحديث Dropbox و التابلت)
 // ==========================================
 class VideoPlayerScreen extends StatefulWidget {
   final String videoUrl; 
@@ -593,7 +593,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         flags: const YoutubePlayerFlags(
           autoPlay: true,
           mute: false,
-          useHybridComposition: true, // ضروري لأجهزة التابلت لتجنب التعليق
+          useHybridComposition: true, 
         ),
       );
     }
@@ -602,6 +602,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
   Future<void> _initStandardPlayer() async {
     String finalUrl = widget.videoUrl;
+    
+    // 1. دعم جوجل درايف تلقائياً
     if (finalUrl.contains("drive.google.com")) {
       RegExp regExp = RegExp(r'id=([a-zA-Z0-9_-]+)|d\/([a-zA-Z0-9_-]+)');
       Match? match = regExp.firstMatch(finalUrl);
@@ -610,8 +612,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         finalUrl = "https://docs.google.com/uc?export=download&id=$id";
       }
     }
+    // 2. دعم Dropbox تلقائياً وتحويله لبث مباشر
+    else if (finalUrl.contains("dropbox.com")) {
+      finalUrl = finalUrl.replaceAll("dl=0", "raw=1");
+    }
 
-    _vpController = VideoPlayerController.networkUrl(Uri.parse(finalUrl));
+    _vpController = VideoPlayerController.networkUrl(
+      Uri.parse(finalUrl),
+      videoPlayerOptions: const VideoPlayerOptions(allowBackgroundPlayback: false),
+    );
     
     try {
       await _vpController!.initialize();
@@ -620,8 +629,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         autoPlay: true,
         fullScreenByDefault: true, 
         allowFullScreen: true,
-        aspectRatio: _vpController!.value.aspectRatio,
-        materialProgressColors: ChewieProgressColors(playedColor: Colors.orange, handleColor: Colors.orange, backgroundColor: Colors.grey, bufferedColor: Colors.white54),
+        isLive: false, // مهم جداً للتابلت لمنع إرهاق الذاكرة
+        placeholder: const Center(child: CircularProgressIndicator(color: Colors.orange)),
+        errorBuilder: (context, errorMessage) {
+          return const Center(child: Text("جاري محاولة التشغيل، يرجى الانتظار قليلاً...", style: TextStyle(color: Colors.white)));
+        },
       );
     } catch (e) {
       print("Error initializing standard player: $e");
@@ -652,7 +664,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                     )
                   : _chewieController != null
                     ? Chewie(controller: _chewieController!)
-                    : const Text("عذراً، لا يمكن تشغيل هذا الفيديو.", style: TextStyle(color: Colors.white)),
+                    : const Text("عذراً، جاري المحاولة...", style: TextStyle(color: Colors.white)),
             ),
             Positioned(
               top: 10,
