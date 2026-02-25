@@ -619,7 +619,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
     _vpController = VideoPlayerController.networkUrl(
       Uri.parse(finalUrl),
-      videoPlayerOptions: const VideoPlayerOptions(allowBackgroundPlayback: false),
+      videoPlayerOptions: VideoPlayerOptions(allowBackgroundPlayback: false),
     );
     
     try {
