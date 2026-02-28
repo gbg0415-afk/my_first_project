@@ -8,57 +8,28 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart' hide User; 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:youtube_player_flutter/youtube_player_flutter.dart';
-import 'package:flutter_vlc_player/flutter_vlc_player.dart'; // محرك VLC الجديد للتابلت
+import 'package:video_player/video_player.dart';
+import 'package:chewie/chewie.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 // ==========================================
 // MODELS
 // ==========================================
 class User {
-  final String id;
-  String name;
-  String phone;
-  final String departmentId;
-  String departmentName;
-  String? deviceId;
-  String? email;
-  String? telegram;
-  List<String> allowedCourseIds;
-
-  User({
-    required this.id,
-    required this.name,
-    required this.phone,
-    required this.departmentId,
-    required this.departmentName,
-    this.deviceId,
-    this.email,
-    this.telegram,
-    required this.allowedCourseIds,
-  });
+  final String id; String name; String phone; final String departmentId; String departmentName;
+  String? deviceId; String? email; String? telegram; List<String> allowedCourseIds;
+  User({required this.id, required this.name, required this.phone, required this.departmentId, required this.departmentName, this.deviceId, this.email, this.telegram, required this.allowedCourseIds});
 }
 
 // ==========================================
 // AUTH PROVIDER
 // ==========================================
 class AuthProvider with ChangeNotifier {
-  User? _user;
-  bool _isLoading = false;
-  bool _isInitializing = true;
-  String? _error;
+  User? _user; bool _isLoading = false; bool _isInitializing = true; String? _error;
+  User? get user => _user; bool get isLoading => _isLoading; bool get isInitializing => _isInitializing; String? get error => _error;
 
-  User? get user => _user;
-  bool get isLoading => _isLoading;
-  bool get isInitializing => _isInitializing;
-  String? get error => _error;
-
-  AuthProvider() {
-    _checkLoginStatus();
-  }
-
-  Future<void> refreshUserData() async {
-    await _checkLoginStatus();
-  }
+  AuthProvider() { _checkLoginStatus(); }
+  Future<void> refreshUserData() async { await _checkLoginStatus(); }
 
   Future<void> _checkLoginStatus() async {
     final firebaseUser = FirebaseAuth.instance.currentUser;
@@ -73,22 +44,13 @@ class AuthProvider with ChangeNotifier {
         } catch (_) {}
 
         _user = User(
-          id: firebaseUser.uid,
-          name: data['name'] ?? "طالب",
-          phone: data['phone'] ?? "",
-          departmentId: data['departmentId'] ?? "",
-          departmentName: deptName,
-          deviceId: data['deviceId'] ?? "",
-          email: data['email'] ?? "",
-          telegram: data['telegram'] ?? "",
+          id: firebaseUser.uid, name: data['name'] ?? "طالب", phone: data['phone'] ?? "", departmentId: data['departmentId'] ?? "",
+          departmentName: deptName, deviceId: data['deviceId'] ?? "", email: data['email'] ?? "", telegram: data['telegram'] ?? "",
           allowedCourseIds: List<String>.from(data['allowedCourseIds'] ?? []),
         );
       }
-    } else {
-      _user = null;
-    }
-    _isInitializing = false;
-    notifyListeners();
+    } else { _user = null; }
+    _isInitializing = false; notifyListeners();
   }
 
   Future<String> _getDeviceId() async {
@@ -103,55 +65,38 @@ class AuthProvider with ChangeNotifier {
     try {
       String email = identifier.contains('@') ? identifier : "$identifier@smacademy.com";
       UserCredential cred = await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: password);
-      
       final userDoc = await FirebaseFirestore.instance.collection('users').doc(cred.user!.uid).get();
       if (userDoc.exists) {
         String savedDeviceId = userDoc.data()?['deviceId'] ?? "";
         String currentDeviceId = await _getDeviceId();
-
         if (savedDeviceId != "" && savedDeviceId != currentDeviceId) {
-          await FirebaseAuth.instance.signOut();
-          _error = "هذا الحساب مرتبط بجهاز آخر. يرجى مراجعة الإدارة.";
-          _isLoading = false; notifyListeners();
-          return false;
+          await FirebaseAuth.instance.signOut(); _error = "هذا الحساب مرتبط بجهاز آخر. يرجى مراجعة الإدارة.";
+          _isLoading = false; notifyListeners(); return false;
         } else if (savedDeviceId == "") {
           await FirebaseFirestore.instance.collection('users').doc(cred.user!.uid).update({'deviceId': currentDeviceId});
         }
       }
-      await _checkLoginStatus();
-      _isLoading = false; return true;
+      await _checkLoginStatus(); _isLoading = false; return true;
     } catch (e) {
-      _error = "بيانات الدخول غير صحيحة";
-      _isLoading = false; notifyListeners();
-      return false;
+      _error = "بيانات الدخول غير صحيحة"; _isLoading = false; notifyListeners(); return false;
     }
   }
 
   Future<bool> register(String name, String phone, String password, String deptId) async {
     _isLoading = true; _error = null; notifyListeners();
     try {
-      String email = "$phone@smacademy.com";
-      String currentDeviceId = await _getDeviceId();
+      String email = "$phone@smacademy.com"; String currentDeviceId = await _getDeviceId();
       UserCredential cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(email: email, password: password);
-      
       await FirebaseFirestore.instance.collection('users').doc(cred.user!.uid).set({
         'uid': cred.user!.uid, 'name': name, 'phone': phone, 'departmentId': deptId,
-        'deviceId': currentDeviceId, 'email': "", 'telegram': "", 'allowedCourseIds': [],
-        'createdAt': FieldValue.serverTimestamp(),
+        'deviceId': currentDeviceId, 'email': "", 'telegram': "", 'allowedCourseIds': [], 'createdAt': FieldValue.serverTimestamp(),
       });
-      await _checkLoginStatus();
-      _isLoading = false; return true;
+      await _checkLoginStatus(); _isLoading = false; return true;
     } catch (e) {
-      _error = "فشل التسجيل، قد يكون الرقم مستخدماً";
-      _isLoading = false; notifyListeners();
-      return false;
+      _error = "فشل التسجيل، قد يكون الرقم مستخدماً"; _isLoading = false; notifyListeners(); return false;
     }
   }
-
-  void logout() async {
-    await FirebaseAuth.instance.signOut();
-    _user = null; notifyListeners();
-  }
+  void logout() async { await FirebaseAuth.instance.signOut(); _user = null; notifyListeners(); }
 }
 
 // ==========================================
@@ -160,15 +105,8 @@ class AuthProvider with ChangeNotifier {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
-  if (Platform.isAndroid) {
-    try { await ScreenProtector.preventScreenshotOn(); } catch (_) {}
-  }
-  runApp(
-    MultiProvider(
-      providers: [ChangeNotifierProvider(create: (_) => AuthProvider())],
-      child: const SMAcademyApp(),
-    ),
-  );
+  if (Platform.isAndroid) { try { await ScreenProtector.preventScreenshotOn(); } catch (_) {} }
+  runApp(MultiProvider(providers: [ChangeNotifierProvider(create: (_) => AuthProvider())], child: const SMAcademyApp()));
 }
 
 class SMAcademyApp extends StatelessWidget {
@@ -180,20 +118,16 @@ class SMAcademyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primaryColor: const Color(0xFF001F3F),
-        scaffoldBackgroundColor: const Color(0xFFF4F7FE),
+        scaffoldBackgroundColor: const Color(0xFFF8F9FE),
         textTheme: GoogleFonts.cairoTextTheme(),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF001F3F), 
-          foregroundColor: Colors.white,
-          elevation: 0,
-          centerTitle: true,
-        ),
+        appBarTheme: const AppBarTheme(backgroundColor: Color(0xFF001F3F), foregroundColor: Colors.white, elevation: 0, centerTitle: true),
+        colorScheme: ColorScheme.fromSwatch().copyWith(secondary: Colors.orangeAccent),
       ),
       builder: (context, child) => Directionality(textDirection: TextDirection.rtl, child: child!),
       home: Consumer<AuthProvider>(
         builder: (context, auth, _) {
           if (auth.isInitializing) return const Scaffold(backgroundColor: Color(0xFF001F3F), body: Center(child: CircularProgressIndicator(color: Colors.white)));
-          return auth.user != null ? const MainScreen() : const LoginScreen();
+          return auth.user != null ? const MainLayout() : const LoginScreen();
         },
       ),
     );
@@ -201,7 +135,7 @@ class SMAcademyApp extends StatelessWidget {
 }
 
 // ==========================================
-// AUTH SCREENS
+// AUTH SCREENS (Premium UI)
 // ==========================================
 class LoginScreen extends StatefulWidget { const LoginScreen({super.key}); @override State<LoginScreen> createState() => _LoginScreenState(); }
 class _LoginScreenState extends State<LoginScreen> {
@@ -210,33 +144,46 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Icon(Icons.school, size: 80, color: Color(0xFF001F3F)),
-                const SizedBox(height: 16),
-                const Text("SM Academy", textAlign: TextAlign.center, style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF001F3F))),
-                const SizedBox(height: 30),
-                if (auth.error != null) Text(auth.error!, style: const TextStyle(color: Colors.red), textAlign: TextAlign.center),
-                const SizedBox(height: 16),
-                TextFormField(controller: _idCtrl, decoration: const InputDecoration(labelText: "رقم الهاتف", border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(15)))), validator: (v) => v!.isEmpty ? "مطلوب" : null),
-                const SizedBox(height: 16),
-                TextFormField(controller: _passCtrl, obscureText: true, decoration: const InputDecoration(labelText: "كلمة المرور", border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(15)))), validator: (v) => v!.isEmpty ? "مطلوب" : null),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: auth.isLoading ? null : () { if (_formKey.currentState!.validate()) auth.login(_idCtrl.text, _passCtrl.text); },
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF001F3F), padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
-                  child: auth.isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text("تسجيل الدخول", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(colors: [Color(0xFF001F3F), Color(0xFF003366)], begin: Alignment.topCenter, end: Alignment.bottomCenter),
+        ),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Card(
+              elevation: 10, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: const Color(0xFFF4F7FE), shape: BoxShape.circle), child: const Icon(Icons.school, size: 60, color: Color(0xFF001F3F))),
+                      const SizedBox(height: 16),
+                      const Text("SM Academy", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Color(0xFF001F3F))),
+                      const SizedBox(height: 30),
+                      if (auth.error != null) Padding(padding: const EdgeInsets.only(bottom: 15), child: Text(auth.error!, style: const TextStyle(color: Colors.red), textAlign: TextAlign.center)),
+                      TextFormField(controller: _idCtrl, decoration: InputDecoration(labelText: "رقم الهاتف", prefixIcon: const Icon(Icons.phone), border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))), validator: (v) => v!.isEmpty ? "مطلوب" : null),
+                      const SizedBox(height: 16),
+                      TextFormField(controller: _passCtrl, obscureText: true, decoration: InputDecoration(labelText: "كلمة المرور", prefixIcon: const Icon(Icons.lock), border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))), validator: (v) => v!.isEmpty ? "مطلوب" : null),
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton(
+                          onPressed: auth.isLoading ? null : () { if (_formKey.currentState!.validate()) auth.login(_idCtrl.text, _passCtrl.text); },
+                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF001F3F), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
+                          child: auth.isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text("تسجيل الدخول", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SignupScreen())), child: const Text("ليس لديك حساب؟ إنشاء حساب", style: TextStyle(color: Color(0xFF001F3F), fontWeight: FontWeight.bold))),
+                    ],
+                  ),
                 ),
-                TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SignupScreen())), child: const Text("إنشاء حساب جديد", style: TextStyle(color: Color(0xFF001F3F), fontWeight: FontWeight.bold))),
-              ],
+              ),
             ),
           ),
         ),
@@ -253,42 +200,40 @@ class _SignupScreenState extends State<SignupScreen> {
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
     return Scaffold(
-      appBar: AppBar(title: const Text("إنشاء حساب")),
+      appBar: AppBar(title: const Text("إنشاء حساب جديد")),
       body: FutureBuilder<QuerySnapshot>(
         future: FirebaseFirestore.instance.collection('departments').get(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("لا توجد أقسام متاحة حالياً."));
-          var departments = snapshot.data!.docs;
+          var departments = snapshot.data?.docs ?? [];
           return SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: Form(
               key: _formKey,
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  TextFormField(controller: _nameCtrl, decoration: const InputDecoration(labelText: "الاسم الكامل", border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(15)))), validator: (v) => v!.isEmpty ? "مطلوب" : null),
-                  const SizedBox(height: 16),
-                  TextFormField(controller: _phoneCtrl, decoration: const InputDecoration(labelText: "رقم الهاتف", border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(15)))), keyboardType: TextInputType.phone, validator: (v) => v!.isEmpty ? "مطلوب" : null),
-                  const SizedBox(height: 16),
-                  TextFormField(controller: _passCtrl, obscureText: true, decoration: const InputDecoration(labelText: "كلمة المرور", border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(15)))), validator: (v) => v!.isEmpty ? "مطلوب" : null),
-                  const SizedBox(height: 16),
+                  TextFormField(controller: _nameCtrl, decoration: InputDecoration(labelText: "الاسم الكامل", border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))), validator: (v) => v!.isEmpty ? "مطلوب" : null), const SizedBox(height: 16),
+                  TextFormField(controller: _phoneCtrl, decoration: InputDecoration(labelText: "رقم الهاتف", border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))), keyboardType: TextInputType.phone, validator: (v) => v!.isEmpty ? "مطلوب" : null), const SizedBox(height: 16),
+                  TextFormField(controller: _passCtrl, obscureText: true, decoration: InputDecoration(labelText: "كلمة المرور", border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))), validator: (v) => v!.isEmpty ? "مطلوب" : null), const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
                     value: _selectedDeptId, hint: const Text("اختر القسم"),
-                    decoration: const InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(15)))),
+                    decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))),
                     items: departments.map((doc) => DropdownMenuItem(value: doc.id, child: Text((doc.data() as Map)['name'] ?? ''))).toList(),
                     onChanged: (val) => setState(() => _selectedDeptId = val), validator: (v) => v == null ? "مطلوب" : null,
                   ),
                   const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: auth.isLoading ? null : () async {
-                      if (_formKey.currentState!.validate() && _selectedDeptId != null) {
-                        bool success = await auth.register(_nameCtrl.text, _phoneCtrl.text, _passCtrl.text, _selectedDeptId!);
-                        if (success && mounted) Navigator.pop(context);
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF001F3F), padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
-                    child: auth.isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text("إنشاء حساب", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  SizedBox(
+                    width: double.infinity, height: 50,
+                    child: ElevatedButton(
+                      onPressed: auth.isLoading ? null : () async {
+                        if (_formKey.currentState!.validate() && _selectedDeptId != null) {
+                          bool success = await auth.register(_nameCtrl.text, _phoneCtrl.text, _passCtrl.text, _selectedDeptId!);
+                          if (success && mounted) Navigator.pop(context);
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF001F3F), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
+                      child: auth.isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text("إنشاء الحساب", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                    ),
                   ),
                 ],
               ),
@@ -301,126 +246,217 @@ class _SignupScreenState extends State<SignupScreen> {
 }
 
 // ==========================================
-// MAIN SCREEN (Dashboard)
+// MAIN LAYOUT (Bottom Navigation)
 // ==========================================
-class MainScreen extends StatelessWidget {
-  const MainScreen({super.key});
+class MainLayout extends StatefulWidget { const MainLayout({super.key}); @override State<MainLayout> createState() => _MainLayoutState(); }
+class _MainLayoutState extends State<MainLayout> {
+  int _currentIndex = 0;
+  final List<Widget> _pages = [const HomeScreen(), const ProfileScreen()];
 
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: _pages[_currentIndex],
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, spreadRadius: 2)]),
+        child: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: (index) => setState(() => _currentIndex = index),
+          backgroundColor: Colors.white,
+          selectedItemColor: const Color(0xFF001F3F),
+          unselectedItemColor: Colors.grey,
+          showUnselectedLabels: true,
+          type: BottomNavigationBarType.fixed,
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: "الرئيسية"),
+            BottomNavigationBarItem(icon: Icon(Icons.person), label: "حسابي"),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// HOME SCREEN (Dashboard with Hero animations)
+// ==========================================
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).user!;
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            expandedHeight: 180.0,
-            floating: false,
-            pinned: true,
-            flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(colors: [Color(0xFF001F3F), Color(0xFF003366)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 80, right: 20, left: 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text("مرحباً بك، ${user.name}", style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 5),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        decoration: BoxDecoration(color: Colors.orangeAccent, borderRadius: BorderRadius.circular(20)),
-                        child: Text(user.departmentName, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12)),
-                      ),
-                    ],
+      body: RefreshIndicator(
+        onRefresh: () => Provider.of<AuthProvider>(context, listen: false).refreshUserData(),
+        child: CustomScrollView(
+          slivers: [
+            SliverAppBar(
+              expandedHeight: 160.0, floating: false, pinned: true,
+              flexibleSpace: FlexibleSpaceBar(
+                background: Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(colors: [Color(0xFF001F3F), Color(0xFF004080)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                    borderRadius: BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 70, right: 20, left: 20),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text("مرحباً دكتور،", style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 16)),
+                            Text(user.name, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 8),
+                            Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), decoration: BoxDecoration(color: Colors.orangeAccent.withOpacity(0.9), borderRadius: BorderRadius.circular(20)), child: Text(user.departmentName, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12))),
+                          ],
+                        ),
+                        CircleAvatar(radius: 25, backgroundColor: Colors.white24, child: const Icon(Icons.medical_services, color: Colors.white, size: 28)),
+                      ],
+                    ),
                   ),
                 ),
               ),
+              shape: const ContinuousRectangleBorder(borderRadius: BorderRadius.only(bottomLeft: Radius.circular(60), bottomRight: Radius.circular(60))),
             ),
-            actions: [
-              IconButton(icon: const Icon(Icons.refresh), onPressed: () => Provider.of<AuthProvider>(context, listen: false).refreshUserData()),
-              GestureDetector(
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
-                child: const Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: CircleAvatar(radius: 18, backgroundColor: Colors.white24, child: Icon(Icons.person, color: Colors.white))),
+            const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.fromLTRB(20, 25, 20, 10), child: Text("الكورسات المتاحة لك", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF001F3F))))),
+            FutureBuilder<QuerySnapshot>(
+              future: FirebaseFirestore.instance.collection('courses').where('departmentId', isEqualTo: user.departmentId).get(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) return const SliverToBoxAdapter(child: Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator())));
+                var allowedCourses = snapshot.data?.docs.where((c) => user.allowedCourseIds.contains(c.id)).toList() ?? [];
+                
+                if (allowedCourses.isEmpty) {
+                  return SliverToBoxAdapter(
+                    child: Center(
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 50),
+                          Icon(Icons.lock_outline, size: 80, color: Colors.grey.withOpacity(0.5)),
+                          const SizedBox(height: 15),
+                          const Text("لم يتم تفعيل أي كورس لك بعد\nتواصل مع الإدارة للتفعيل", textAlign: TextAlign.center, style: TextStyle(fontSize: 16, color: Colors.grey)),
+                        ],
+                      )
+                    )
+                  );
+                }
+
+                return SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                  sliver: SliverGrid(
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 15, mainAxisSpacing: 15, childAspectRatio: 0.8),
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        var cData = allowedCourses[index].data() as Map<String, dynamic>;
+                        String imgUrl = cData['imageUrl'] ?? cData['coverImage'] ?? '';
+                        String cId = allowedCourses[index].id;
+                        return GestureDetector(
+                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CourseLecturesScreen(courseId: cId, courseTitle: cData['title'] ?? 'كورس', imageUrl: imgUrl))),
+                          child: Container(
+                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.15), blurRadius: 15, offset: const Offset(0, 5))]),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Expanded(
+                                  flex: 5,
+                                  child: Hero(
+                                    tag: 'course_img_$cId',
+                                    child: ClipRRect(
+                                      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                                      child: imgUrl.isNotEmpty ? CachedNetworkImage(imageUrl: imgUrl, fit: BoxFit.cover, placeholder: (c, u) => Container(color: Colors.grey[200], child: const Center(child: CircularProgressIndicator(strokeWidth: 2)))) : Container(color: Colors.grey[200], child: const Icon(Icons.medical_information, size: 50, color: Colors.grey)),
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 3,
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12.0),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Text(cData['title'] ?? 'بدون عنوان', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF001F3F))),
+                                        const Spacer(),
+                                        Row(children: [const Icon(Icons.play_circle_fill, size: 14, color: Colors.orange), const SizedBox(width: 4), const Text("دخول للكورس", style: TextStyle(color: Colors.orange, fontSize: 11, fontWeight: FontWeight.bold))]),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                      childCount: allowedCourses.length,
+                    ),
+                  ),
+                );
+              }
+            ),
+            const SliverPadding(padding: EdgeInsets.only(bottom: 40))
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// COURSE LECTURES SCREEN (Sliver Layout)
+// ==========================================
+class CourseLecturesScreen extends StatelessWidget {
+  final String courseId; final String courseTitle; final String imageUrl;
+  const CourseLecturesScreen({super.key, required this.courseId, required this.courseTitle, required this.imageUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            expandedHeight: 220.0, pinned: true,
+            flexibleSpace: FlexibleSpaceBar(
+              title: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(8)), child: Text(courseTitle, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
+              background: Hero(
+                tag: 'course_img_$courseId',
+                child: imageUrl.isNotEmpty ? CachedNetworkImage(imageUrl: imageUrl, fit: BoxFit.cover) : Container(color: const Color(0xFF001F3F), child: const Icon(Icons.school, size: 80, color: Colors.white24)),
               ),
-            ],
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: const Text("كورساتي", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF001F3F))),
             ),
           ),
           FutureBuilder<QuerySnapshot>(
-            future: FirebaseFirestore.instance.collection('courses').where('departmentId', isEqualTo: user.departmentId).get(),
+            future: FirebaseFirestore.instance.collection('lectures').where('courseId', isEqualTo: courseId).get(),
             builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
-              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const SliverToBoxAdapter(child: Center(child: Text("لا توجد كورسات متاحة.")));
-
-              var allowedCourses = snapshot.data!.docs.where((c) => user.allowedCourseIds.contains(c.id)).toList();
-              if (allowedCourses.isEmpty) {
-                return const SliverToBoxAdapter(
-                  child: Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(20), 
-                      child: Text("لم يتم تفعيل أي كورس لك بعد. تواصل مع الإدارة.", style: TextStyle(fontSize: 16, color: Colors.grey))
-                    )
-                  )
-                );
-              }
+              if (snapshot.connectionState == ConnectionState.waiting) return const SliverToBoxAdapter(child: Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator())));
+              var lectures = snapshot.data?.docs ?? [];
+              lectures.sort((a, b) => ((a.data() as Map)['position'] ?? 9999).compareTo(((b.data() as Map)['position'] ?? 9999)));
+              
+              if (lectures.isEmpty) return const SliverToBoxAdapter(child: Center(child: Padding(padding: EdgeInsets.all(40), child: Text("لا توجد محاضرات حالياً في هذا الكورس."))));
 
               return SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                sliver: SliverGrid(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 15, mainAxisSpacing: 15, childAspectRatio: 0.85),
+                padding: const EdgeInsets.all(20),
+                sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
-                      var courseData = allowedCourses[index].data() as Map<String, dynamic>;
-                      String imageUrl = courseData['imageUrl'] ?? courseData['coverImage'] ?? '';
-                      return GestureDetector(
-                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CourseLecturesScreen(courseId: allowedCourses[index].id, courseTitle: courseData['title'] ?? 'كورس'))),
-                        child: Container(
-                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10, spreadRadius: 2)]),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Expanded(
-                                flex: 3,
-                                child: ClipRRect(
-                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                                  child: imageUrl.isNotEmpty 
-                                    ? CachedNetworkImage(imageUrl: imageUrl, fit: BoxFit.cover, errorWidget: (c, u, e) => const Icon(Icons.image_not_supported, size: 50, color: Colors.grey))
-                                    : Container(color: Colors.grey[200], child: const Icon(Icons.menu_book, size: 50, color: Colors.grey)),
-                                ),
-                              ),
-                              Expanded(
-                                flex: 2,
-                                child: Padding(
-                                  padding: const EdgeInsets.all(12.0),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Text(courseData['title'] ?? 'بدون عنوان', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF001F3F))),
-                                      const SizedBox(height: 5),
-                                      const Text("دخول للكورس >", style: TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.bold)),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
+                      var lData = lectures[index].data() as Map<String, dynamic>;
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)), elevation: 2,
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.all(15),
+                          leading: Container(width: 50, height: 50, decoration: BoxDecoration(color: const Color(0xFF001F3F).withOpacity(0.05), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.menu_book_rounded, color: Color(0xFF001F3F), size: 28)),
+                          title: Text(lData['title'] ?? 'محاضرة', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                          subtitle: Text(lData['description'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
+                          trailing: Container(padding: const EdgeInsets.all(8), decoration: const BoxDecoration(color: Color(0xFFF4F7FE), shape: BoxShape.circle), child: const Icon(Icons.arrow_forward_ios, size: 14, color: Color(0xFF001F3F))),
+                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => LectureDetailsScreen(lectureData: lData))),
                         ),
                       );
-                    },
-                    childCount: allowedCourses.length,
+                    }, childCount: lectures.length,
                   ),
                 ),
               );
             }
           ),
-          const SliverPadding(padding: EdgeInsets.only(bottom: 40))
         ],
       ),
     );
@@ -428,127 +464,71 @@ class MainScreen extends StatelessWidget {
 }
 
 // ==========================================
-// COURSE LECTURES LIST SCREEN
-// ==========================================
-class CourseLecturesScreen extends StatelessWidget {
-  final String courseId; final String courseTitle;
-  const CourseLecturesScreen({super.key, required this.courseId, required this.courseTitle});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(courseTitle)),
-      body: FutureBuilder<QuerySnapshot>(
-        future: FirebaseFirestore.instance.collection('lectures').where('courseId', isEqualTo: courseId).get(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text("لا توجد محاضرات حالياً."));
-
-          var lectures = snapshot.data!.docs;
-          lectures.sort((a, b) => ((a.data() as Map)['position'] ?? 9999).compareTo(((b.data() as Map)['position'] ?? 9999)));
-
-          return ListView.builder(
-            padding: const EdgeInsets.all(20),
-            itemCount: lectures.length,
-            itemBuilder: (context, index) {
-              var lectureData = lectures[index].data() as Map<String, dynamic>;
-              
-              return Card(
-                margin: const EdgeInsets.only(bottom: 15),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                elevation: 3,
-                child: ListTile(
-                  contentPadding: const EdgeInsets.all(15),
-                  leading: Container(width: 50, height: 50, decoration: BoxDecoration(color: const Color(0xFF001F3F).withOpacity(0.1), borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.folder, color: Color(0xFF001F3F), size: 30)),
-                  title: Text(lectureData['title'] ?? 'محاضرة', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text(lectureData['description'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis),
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                  onTap: () {
-                    Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => LectureDetailsScreen(lectureData: lectureData)
-                    ));
-                  },
-                ),
-              );
-            }
-          );
-        }
-      )
-    );
-  }
-}
-
-// ==========================================
-// LECTURE DETAILS SCREEN 
+// LECTURE DETAILS SCREEN (Smart Routing)
 // ==========================================
 class LectureDetailsScreen extends StatelessWidget {
   final Map<String, dynamic> lectureData;
-
   const LectureDetailsScreen({super.key, required this.lectureData});
 
   @override
   Widget build(BuildContext context) {
     List parts = lectureData['parts'] ?? [];
-
     return Scaffold(
-      appBar: AppBar(title: Text(lectureData['title'] ?? 'تفاصيل المحاضرة')),
+      appBar: AppBar(title: Text(lectureData['title'] ?? 'المحاضرة'), elevation: 0),
       body: Column(
         children: [
           Container(
-            height: 200,
-            width: double.infinity,
-            color: const Color(0xFF001F3F),
-            child: const Center(
-              child: Icon(Icons.library_books, size: 80, color: Colors.white24),
+            padding: const EdgeInsets.all(20), width: double.infinity,
+            decoration: const BoxDecoration(color: Color(0xFF001F3F), borderRadius: BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30))),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(lectureData['title'] ?? '', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
+                const SizedBox(height: 10),
+                Text(lectureData['description'] ?? 'لا يوجد وصف متاح.', style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14)),
+              ],
             ),
           ),
           Expanded(
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                Text(lectureData['title'] ?? '', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF001F3F))),
-                const SizedBox(height: 10),
-                Text(lectureData['description'] ?? 'لا يوجد وصف حالياً لهذه المحاضرة.', style: const TextStyle(color: Colors.grey, fontSize: 14)),
-                const SizedBox(height: 30),
-                
                 if (lectureData['pdfUrl'] != null && lectureData['pdfUrl'].toString().isNotEmpty)
-                  ElevatedButton.icon(
-                    onPressed: () {
-                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("سيتم فتح الملف قريباً")));
-                    }, 
-                    icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
-                    label: const Text("تحميل ملزمة المحاضرة (PDF)", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], padding: const EdgeInsets.all(15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 25),
+                    child: ElevatedButton.icon(
+                      onPressed: () async { final Uri uri = Uri.parse(lectureData['pdfUrl']); if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication); }, 
+                      icon: const Icon(Icons.picture_as_pdf, color: Colors.white), label: const Text("تحميل ملزمة المحاضرة (PDF)", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, padding: const EdgeInsets.all(16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)), elevation: 5),
+                    ),
                   ),
                 
-                const SizedBox(height: 30),
-                const Text("أجزاء الفيديو المتاحة:", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF001F3F))),
-                const SizedBox(height: 10),
+                Row(children: const [Icon(Icons.video_library, color: Color(0xFF001F3F)), SizedBox(width: 8), Text("أجزاء الفيديو:", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF001F3F)))]),
+                const SizedBox(height: 15),
                 
-                if (parts.isEmpty)
-                  const Center(child: Padding(padding: EdgeInsets.all(20.0), child: Text("لا توجد فيديوهات مضافة لهذه المحاضرة.")))
-                else
-                  ...parts.map((part) => Card(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    elevation: 1,
+                if (parts.isEmpty) const Center(child: Padding(padding: EdgeInsets.all(20.0), child: Text("لا توجد فيديوهات مضافة.", style: TextStyle(color: Colors.grey))))
+                else ...parts.map((part) {
+                  String url = part['url'] ?? '';
+                  bool isYoutube = url.contains('youtube.com') || url.contains('youtu.be');
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 1,
                     child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: part['type'] == 'youtube' || (part['url'] ?? '').contains('youtu') ? Colors.red : const Color(0xFF001F3F), 
-                        child: Icon(part['type'] == 'youtube' || (part['url'] ?? '').contains('youtu') ? Icons.ondemand_video : Icons.play_arrow, color: Colors.white)
-                      ),
-                      title: Text(part['title'] ?? 'جزء غير معنون', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      trailing: const Icon(Icons.arrow_forward_ios, size: 14),
-                      onTap: () {
-                        Navigator.push(context, MaterialPageRoute(
-                          builder: (_) => VideoPlayerScreen(
-                            videoUrl: part['url'] ?? '', 
-                            title: part['title'] ?? 'عرض الفيديو'
-                          )
-                        ));
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      leading: CircleAvatar(radius: 22, backgroundColor: isYoutube ? Colors.red.withOpacity(0.1) : const Color(0xFF001F3F).withOpacity(0.1), child: Icon(isYoutube ? Icons.ondemand_video : Icons.play_arrow, color: isYoutube ? Colors.red : const Color(0xFF001F3F))),
+                      title: Text(part['title'] ?? 'جزء الفيديو', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      subtitle: Text(isYoutube ? "يفتح في تطبيق يوتيوب" : "مشاهدة داخل التطبيق", style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                      trailing: Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.play_circle_outline, size: 20, color: Colors.orange)),
+                      onTap: () async {
+                        if (isYoutube) {
+                          final Uri uri = Uri.parse(url);
+                          if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        } else {
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => VideoPlayerScreen(videoUrl: url, title: part['title'] ?? '')));
+                        }
                       },
                     ),
-                  )).toList(),
+                  );
+                }).toList(),
               ],
             ),
           ),
@@ -559,174 +539,95 @@ class LectureDetailsScreen extends StatelessWidget {
 }
 
 // ==========================================
-// VIDEO PLAYER SCREEN (تحديث مشغلين: يوتيوب و VLC)
+// VIDEO PLAYER SCREEN (Premium Chewie with Watermark)
 // ==========================================
 class VideoPlayerScreen extends StatefulWidget {
-  final String videoUrl; 
-  final String title;
+  final String videoUrl; final String title;
   const VideoPlayerScreen({super.key, required this.videoUrl, required this.title});
   @override State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
 }
 
 class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
-  YoutubePlayerController? _ytController;
-  VlcPlayerController? _vlcController; // استخدام VLC بدلاً من video_player
-  bool isYoutube = false;
-  bool isLoading = true;
+  VideoPlayerController? _vpController; ChewieController? _chewieController; bool isLoading = true;
 
-  @override
-  void initState() {
-    super.initState();
-    isYoutube = widget.videoUrl.contains("youtube.com") || widget.videoUrl.contains("youtu.be");
-    
-    if (isYoutube) {
-      _initYoutube();
-    } else {
-      _initVlcPlayer();
-    }
-  }
+  @override void initState() { super.initState(); _initPlayer(); }
 
-  void _initYoutube() {
-    String? videoId = YoutubePlayer.convertUrlToId(widget.videoUrl);
-    if (videoId != null) {
-      _ytController = YoutubePlayerController(
-        initialVideoId: videoId,
-        flags: const YoutubePlayerFlags(
-          autoPlay: true,
-          mute: false,
-          useHybridComposition: true, // الحل الجذري لأجهزة هواوي والأندرويد الحديثة
-        ),
+  Future<void> _initPlayer() async {
+    _vpController = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
+    try {
+      await _vpController!.initialize();
+      _chewieController = ChewieController(
+        videoPlayerController: _vpController!,
+        autoPlay: true, fullScreenByDefault: true, allowFullScreen: true, allowPlaybackSpeedChanging: true,
+        materialProgressColors: ChewieProgressColors(playedColor: Colors.orange, handleColor: Colors.orange, backgroundColor: Colors.grey, bufferedColor: Colors.white30),
+        placeholder: const Center(child: CircularProgressIndicator(color: Colors.orange)),
+        errorBuilder: (context, errorMessage) => Center(child: Padding(padding: const EdgeInsets.all(20), child: Text("خطأ في التشغيل: تأكد من الرابط أو اتصال الإنترنت", style: const TextStyle(color: Colors.white)))),
       );
-    }
-    setState(() => isLoading = false);
-  }
-
-  Future<void> _initVlcPlayer() async {
-    String finalUrl = widget.videoUrl;
-    
-    // دعم درايف تلقائياً
-    if (finalUrl.contains("drive.google.com")) {
-      RegExp regExp = RegExp(r'id=([a-zA-Z0-9_-]+)|d\/([a-zA-Z0-9_-]+)');
-      Match? match = regExp.firstMatch(finalUrl);
-      String? id = match?.group(1) ?? match?.group(2);
-      if (id != null) {
-        finalUrl = "https://docs.google.com/uc?export=download&id=$id";
-      }
-    }
-    // دعم Dropbox تلقائياً
-    else if (finalUrl.contains("dropbox.com")) {
-      finalUrl = finalUrl.replaceAll("dl=0", "raw=1");
-    }
-
-    _vlcController = VlcPlayerController.network(
-      finalUrl,
-      hwAcc: HwAcc.full, // استخدام تسريع العتاد لمنع التعليق
-      autoPlay: true,
-      options: VlcPlayerOptions(),
-    );
-    
+    } catch (e) {}
     if (mounted) setState(() => isLoading = false);
   }
 
-  @override
-  Widget build(BuildContext context) {
+  @override Widget build(BuildContext context) {
+    final user = Provider.of<AuthProvider>(context, listen: false).user;
+    final watermarkText = "${user?.name ?? ''}\n${user?.phone ?? ''}";
+
     return Scaffold(
       backgroundColor: Colors.black, 
       body: SafeArea(
         child: Stack(
           children: [
-            Center(
-              child: isLoading 
-                ? const CircularProgressIndicator(color: Colors.orange)
-                : isYoutube && _ytController != null
-                  ? YoutubePlayerBuilder(
-                      player: YoutubePlayer(
-                        controller: _ytController!,
-                        showVideoProgressIndicator: true,
-                      ),
-                      builder: (context, player) {
-                        return player;
-                      },
-                    )
-                  : _vlcController != null
-                    ? VlcPlayer(
-                        controller: _vlcController!,
-                        aspectRatio: 16 / 9,
-                        placeholder: const Center(child: CircularProgressIndicator(color: Colors.orange)),
-                      )
-                    : const Text("عذراً، جاري المحاولة...", style: TextStyle(color: Colors.white)),
-            ),
-            Positioned(
-              top: 10,
-              right: 10,
-              child: Container(
-                decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
-                child: IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white, size: 24),
-                  onPressed: () => Navigator.pop(context),
-                ),
+            Center(child: isLoading ? const CircularProgressIndicator(color: Colors.orange) : _chewieController != null ? Chewie(controller: _chewieController!) : const Text("عذراً، حدث خطأ في التشغيل", style: TextStyle(color: Colors.white))),
+            if (!isLoading && _chewieController != null)
+              IgnorePointer(child: Center(child: Transform.rotate(angle: -0.5, child: Text(watermarkText, textAlign: TextAlign.center, style: TextStyle(color: Colors.white.withOpacity(0.12), fontSize: 26, fontWeight: FontWeight.bold, letterSpacing: 2))))),
+            Positioned(top: 15, right: 15, child: Container(decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(12)), child: IconButton(icon: const Icon(Icons.close, color: Colors.white, size: 24), onPressed: () => Navigator.pop(context)))),
+            Positioned(top: 25, left: 15, child: Text(widget.title, style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold))),
+          ],
+        ),
+      ),
+    );
+  }
+  @override void dispose() { _vpController?.dispose(); _chewieController?.dispose(); super.dispose(); }
+}
+
+// ==========================================
+// PROFILE SCREEN
+// ==========================================
+class ProfileScreen extends StatelessWidget { 
+  const ProfileScreen({super.key}); 
+  @override Widget build(BuildContext context) {
+    final u = Provider.of<AuthProvider>(context).user;
+    return Scaffold(
+      appBar: AppBar(title: const Text("حسابي"), elevation: 0),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            const SizedBox(height: 20),
+            Center(child: Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.orange, width: 2)), child: const CircleAvatar(radius: 50, backgroundColor: Color(0xFF001F3F), child: Icon(Icons.person, size: 50, color: Colors.white)))),
+            const SizedBox(height: 15),
+            Text(u?.name ?? "", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF001F3F))),
+            Container(margin: const EdgeInsets.only(top: 5), padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 5), decoration: BoxDecoration(color: const Color(0xFF001F3F).withOpacity(0.1), borderRadius: BorderRadius.circular(20)), child: Text(u?.departmentName ?? "", style: const TextStyle(color: Color(0xFF001F3F), fontWeight: FontWeight.bold))),
+            const SizedBox(height: 30),
+            Card(
+              elevation: 2, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+              child: Column(
+                children: [
+                  _tile(Icons.phone, "رقم الهاتف", u?.phone ?? ""), const Divider(height: 0),
+                  _tile(Icons.email, "البريد الإلكتروني", (u?.email?.isEmpty??true)?"غير محدد":u!.email!), const Divider(height: 0),
+                  _tile(Icons.telegram, "معرف تليجرام", (u?.telegram?.isEmpty??true)?"غير محدد":u!.telegram!),
+                ],
               ),
+            ),
+            const SizedBox(height: 30),
+            ElevatedButton.icon(
+              onPressed: () => Provider.of<AuthProvider>(context, listen: false).logout(),
+              icon: const Icon(Icons.logout, color: Colors.white), label: const Text("تسجيل الخروج", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, minimumSize: const Size(double.infinity, 50), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
             ),
           ],
         ),
       ),
     );
   }
-
-  @override
-  void dispose() {
-    _ytController?.dispose();
-    _vlcController?.dispose();
-    super.dispose();
-  }
-}
-
-// ==========================================
-// PROFILE SCREEN
-// ==========================================
-class ProfileScreen extends StatefulWidget { const ProfileScreen({super.key}); @override State<ProfileScreen> createState() => _ProfileScreenState(); }
-class _ProfileScreenState extends State<ProfileScreen> {
-  Future<void> _update(String field, String val) async {
-    final u = Provider.of<AuthProvider>(context, listen: false).user;
-    if (u != null) {
-      await FirebaseFirestore.instance.collection('users').doc(u.id).update({field: val});
-      Provider.of<AuthProvider>(context, listen: false).refreshUserData();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("تم التحديث")));
-    }
-  }
-  void _showEdit(String title, String field, String current) {
-    TextEditingController c = TextEditingController(text: current);
-    showDialog(context: context, builder: (_) => AlertDialog(
-      title: Text("تعديل $title"), content: TextField(controller: c),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
-        ElevatedButton(onPressed: () { if (c.text.isNotEmpty) { _update(field, c.text); Navigator.pop(context); } }, child: const Text("حفظ")),
-      ],
-    ));
-  }
-  @override
-  Widget build(BuildContext context) {
-    final u = Provider.of<AuthProvider>(context).user;
-    return Scaffold(
-      appBar: AppBar(title: const Text("الملف الشخصي")),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          const Center(child: CircleAvatar(radius: 50, backgroundColor: Color(0xFF001F3F), child: Icon(Icons.person, size: 50, color: Colors.white))),
-          const SizedBox(height: 20),
-          _item("الاسم", u?.name ?? "", true, () => _showEdit("الاسم", "name", u?.name ?? "")),
-          _item("الهاتف", u?.phone ?? "", true, () => _showEdit("الهاتف", "phone", u?.phone ?? "")),
-          _item("الإيميل", (u?.email?.isEmpty??true)?"أضف ايميل":u!.email!, true, () => _showEdit("الإيميل", "email", u?.email ?? "")),
-          _item("تليجرام", (u?.telegram?.isEmpty??true)?"أضف @username":u!.telegram!, true, () => _showEdit("تليجرام", "telegram", u?.telegram ?? "")),
-          const Divider(),
-          _item("القسم", u?.departmentName ?? "", false, null),
-          const SizedBox(height: 30),
-          TextButton(onPressed: () { Navigator.pop(context); Provider.of<AuthProvider>(context, listen: false).logout(); }, child: const Text("تسجيل الخروج", style: TextStyle(color: Colors.red, fontSize: 16, fontWeight: FontWeight.bold))),
-        ],
-      ),
-    );
-  }
-  Widget _item(String l, String v, bool ed, VoidCallback? onT) {
-    return ListTile(title: Text(l, style: const TextStyle(fontSize: 12, color: Colors.grey)), subtitle: Text(v, style: const TextStyle(fontSize: 16)), trailing: ed ? const Icon(Icons.edit, size: 16) : null, onTap: onT);
-  }
+  Widget _tile(IconData icon, String title, String val) => ListTile(leading: Icon(icon, color: const Color(0xFF001F3F)), title: Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey)), subtitle: Text(val, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)));
 }
