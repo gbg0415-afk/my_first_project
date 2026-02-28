@@ -8,9 +8,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart' hide User; 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:video_player/video_player.dart';
-import 'package:chewie/chewie.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+import 'package:flutter_vlc_player/flutter_vlc_player.dart'; // محرك VLC الجديد للتابلت
 
 // ==========================================
 // MODELS
@@ -534,7 +533,10 @@ class LectureDetailsScreen extends StatelessWidget {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     elevation: 1,
                     child: ListTile(
-                      leading: const CircleAvatar(backgroundColor: Color(0xFF001F3F), child: Icon(Icons.play_arrow, color: Colors.white)),
+                      leading: CircleAvatar(
+                        backgroundColor: part['type'] == 'youtube' || (part['url'] ?? '').contains('youtu') ? Colors.red : const Color(0xFF001F3F), 
+                        child: Icon(part['type'] == 'youtube' || (part['url'] ?? '').contains('youtu') ? Icons.ondemand_video : Icons.play_arrow, color: Colors.white)
+                      ),
                       title: Text(part['title'] ?? 'جزء غير معنون', style: const TextStyle(fontWeight: FontWeight.bold)),
                       trailing: const Icon(Icons.arrow_forward_ios, size: 14),
                       onTap: () {
@@ -557,7 +559,7 @@ class LectureDetailsScreen extends StatelessWidget {
 }
 
 // ==========================================
-// VIDEO PLAYER SCREEN (تحديث Dropbox و التابلت)
+// VIDEO PLAYER SCREEN (تحديث مشغلين: يوتيوب و VLC)
 // ==========================================
 class VideoPlayerScreen extends StatefulWidget {
   final String videoUrl; 
@@ -568,8 +570,7 @@ class VideoPlayerScreen extends StatefulWidget {
 
 class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   YoutubePlayerController? _ytController;
-  VideoPlayerController? _vpController;
-  ChewieController? _chewieController;
+  VlcPlayerController? _vlcController; // استخدام VLC بدلاً من video_player
   bool isYoutube = false;
   bool isLoading = true;
 
@@ -581,7 +582,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     if (isYoutube) {
       _initYoutube();
     } else {
-      _initStandardPlayer();
+      _initVlcPlayer();
     }
   }
 
@@ -593,17 +594,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         flags: const YoutubePlayerFlags(
           autoPlay: true,
           mute: false,
-          useHybridComposition: true, 
+          useHybridComposition: true, // الحل الجذري لأجهزة هواوي والأندرويد الحديثة
         ),
       );
     }
     setState(() => isLoading = false);
   }
 
-  Future<void> _initStandardPlayer() async {
+  Future<void> _initVlcPlayer() async {
     String finalUrl = widget.videoUrl;
     
-    // 1. دعم جوجل درايف تلقائياً
+    // دعم درايف تلقائياً
     if (finalUrl.contains("drive.google.com")) {
       RegExp regExp = RegExp(r'id=([a-zA-Z0-9_-]+)|d\/([a-zA-Z0-9_-]+)');
       Match? match = regExp.firstMatch(finalUrl);
@@ -612,32 +613,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         finalUrl = "https://docs.google.com/uc?export=download&id=$id";
       }
     }
-    // 2. دعم Dropbox تلقائياً وتحويله لبث مباشر
+    // دعم Dropbox تلقائياً
     else if (finalUrl.contains("dropbox.com")) {
       finalUrl = finalUrl.replaceAll("dl=0", "raw=1");
     }
 
-    _vpController = VideoPlayerController.networkUrl(
-      Uri.parse(finalUrl),
-      videoPlayerOptions: VideoPlayerOptions(allowBackgroundPlayback: false),
+    _vlcController = VlcPlayerController.network(
+      finalUrl,
+      hwAcc: HwAcc.full, // استخدام تسريع العتاد لمنع التعليق
+      autoPlay: true,
+      options: VlcPlayerOptions(),
     );
-    
-    try {
-      await _vpController!.initialize();
-      _chewieController = ChewieController(
-        videoPlayerController: _vpController!,
-        autoPlay: true,
-        fullScreenByDefault: true, 
-        allowFullScreen: true,
-        isLive: false, // مهم جداً للتابلت لمنع إرهاق الذاكرة
-        placeholder: const Center(child: CircularProgressIndicator(color: Colors.orange)),
-        errorBuilder: (context, errorMessage) {
-          return const Center(child: Text("جاري محاولة التشغيل، يرجى الانتظار قليلاً...", style: TextStyle(color: Colors.white)));
-        },
-      );
-    } catch (e) {
-      print("Error initializing standard player: $e");
-    }
     
     if (mounted) setState(() => isLoading = false);
   }
@@ -662,8 +648,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                         return player;
                       },
                     )
-                  : _chewieController != null
-                    ? Chewie(controller: _chewieController!)
+                  : _vlcController != null
+                    ? VlcPlayer(
+                        controller: _vlcController!,
+                        aspectRatio: 16 / 9,
+                        placeholder: const Center(child: CircularProgressIndicator(color: Colors.orange)),
+                      )
                     : const Text("عذراً، جاري المحاولة...", style: TextStyle(color: Colors.white)),
             ),
             Positioned(
@@ -686,8 +676,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   @override
   void dispose() {
     _ytController?.dispose();
-    _vpController?.dispose();
-    _chewieController?.dispose();
+    _vlcController?.dispose();
     super.dispose();
   }
 }
