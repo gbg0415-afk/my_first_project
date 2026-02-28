@@ -284,12 +284,19 @@ class HomeScreen extends StatelessWidget {
                             Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), decoration: BoxDecoration(color: Colors.orangeAccent.withOpacity(0.9), borderRadius: BorderRadius.circular(20)), child: Text(user.departmentName, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12))),
                           ],
                         ),
-                        // عرض اللوجو بدل أيقونة المدرسة 
-                        CircleAvatar(
-                          radius: 25, backgroundColor: Colors.white24, 
-                          child: ClipOval(
-                            child: Image.asset('assets/logo.png', width: 50, height: 50, fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => const Icon(Icons.school, color: Colors.white, size: 28)),
-                          ),
+                        // التعديل الجديد: اللوجو مكبر وتحته اسم الأكاديمية
+                        Column(
+                          children: [
+                            CircleAvatar(
+                              radius: 35, 
+                              backgroundColor: Colors.white24,
+                              child: ClipOval(
+                                child: Image.asset('assets/logo.png', width: 70, height: 70, fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => const Icon(Icons.school, color: Colors.white, size: 30)),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text("SM Academy", style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                          ],
                         ),
                       ],
                     ),
