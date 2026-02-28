@@ -20,12 +20,12 @@ dependencies:
   shared_preferences: ^2.2.2
   url_launcher: ^6.2.5
 
-  # المحرك الجديد الجبار (Media Kit) لتشغيل التابلت والهاتف
+  # المحرك الجديد الجبار (Media Kit)
   media_kit: ^1.1.10+1
   media_kit_video: ^1.2.4
   media_kit_libs_video: ^1.0.7
 
-  # مكتبات فايربيز (إصدارات مستقرة)
+  # مكتبات فايربيز
   firebase_core: ^2.27.0
   firebase_auth: ^4.17.8
   cloud_firestore: ^4.15.8
@@ -33,7 +33,18 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.13.1 # أضفنا هذه لتغيير أيقونة التطبيق
+
+# إعدادات أيقونة التطبيق (ستظهر على شاشة الموبايل)
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/logo.png"
 
 flutter:
   uses-material-design: true
+  
+  # تعريف مجلد الصور (تأكد من وجود مسافتين قبل كلمة assets)
+  assets:
+    - assets/logo.png
+
