@@ -412,22 +412,25 @@ class LectureDetailsScreen extends StatelessWidget {
 }
 
 // ==========================================
-// VIDEO PLAYER SCREEN (Media Kit - Software Decoding Force)
+// VIDEO PLAYER SCREEN (مع السرعة والجودة)
 // ==========================================
 class VideoPlayerScreen extends StatefulWidget {
-  final String videoUrl; final String title;
+  final String videoUrl; 
+  final String title;
   const VideoPlayerScreen({super.key, required this.videoUrl, required this.title});
-  @override State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
+  @override 
+  State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
 }
 
 class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   late final player = Player();
   late final controller = VideoController(player);
+  double _currentSpeed = 1.0;
 
   @override
   void initState() {
     super.initState();
-    // إجبار التشفير البرمجي لدعم أجهزة هواوي والتابلت
+    // إجبار التشفير البرمجي
     if (player.platform is NativePlayer) {
       (player.platform as NativePlayer).setProperty('vd-lavc-dr', 'no');
       (player.platform as NativePlayer).setProperty('hwdec', 'no');
@@ -441,6 +444,37 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     super.dispose();
   }
 
+  // دالة تغيير السرعة
+  void _changeSpeed() {
+    final speeds = [0.5, 1.0, 1.25, 1.5, 2.0];
+    int nextIndex = (speeds.indexOf(_currentSpeed) + 1) % speeds.length;
+    setState(() => _currentSpeed = speeds[nextIndex]);
+    player.setRate(_currentSpeed);
+  }
+
+  // دالة قائمة الجودات
+  void _showQualityMenu() {
+    final tracks = player.state.tracks.video;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF001F3F),
+      builder: (ctx) => ListView(
+        shrinkWrap: true,
+        children: tracks.map((track) => ListTile(
+          leading: const Icon(Icons.hd, color: Colors.orange),
+          title: Text(
+            track.id == 'auto' ? 'تلقائي (Adaptive)' : (track.title ?? track.id),
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
+          ),
+          onTap: () {
+            player.setVideoTrack(track);
+            Navigator.pop(ctx);
+          },
+        )).toList(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context, listen: false).user;
@@ -451,17 +485,51 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       body: SafeArea(
         child: Stack(
           children: [
-            Center(child: Video(controller: controller, controls: AdaptiveVideoControls)),
+            // إضافة الأزرار لواجهة المشغل
+            MaterialVideoControlsTheme(
+              normal: MaterialVideoControlsThemeData(
+                topButtonBar: [
+                  const Spacer(),
+                  IconButton(icon: const Icon(Icons.high_quality, color: Colors.white), onPressed: _showQualityMenu),
+                  TextButton(onPressed: _changeSpeed, child: Text('${_currentSpeed}x', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold))),
+                ],
+              ),
+              fullscreen: MaterialVideoControlsThemeData(
+                topButtonBar: [
+                  const Spacer(),
+                  IconButton(icon: const Icon(Icons.high_quality, color: Colors.white), onPressed: _showQualityMenu),
+                  TextButton(onPressed: _changeSpeed, child: Text('${_currentSpeed}x', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold))),
+                ],
+              ),
+              child: Center(child: Video(controller: controller)),
+            ),
+            
+            // العلامة المائية
             IgnorePointer(
               child: Center(
                 child: Transform.rotate(
                   angle: -0.5,
-                  child: Text(watermarkText, textAlign: TextAlign.center, style: TextStyle(color: Colors.white.withOpacity(0.12), fontSize: 26, fontWeight: FontWeight.bold, letterSpacing: 2)),
+                  child: Text(
+                    watermarkText,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white.withOpacity(0.12), fontSize: 26, fontWeight: FontWeight.bold, letterSpacing: 2),
+                  ),
                 ),
               ),
             ),
-            Positioned(top: 15, right: 15, child: Container(decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(12)), child: IconButton(icon: const Icon(Icons.close, color: Colors.white, size: 24), onPressed: () => Navigator.pop(context)))),
-            Positioned(top: 25, left: 15, child: Text(widget.title, style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold))),
+
+            // زر الإغلاق والعنوان
+            Positioned(
+              top: 15, right: 15, 
+              child: Container(
+                decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(12)), 
+                child: IconButton(icon: const Icon(Icons.close, color: Colors.white, size: 24), onPressed: () => Navigator.pop(context))
+              )
+            ),
+            Positioned(
+              top: 25, left: 15, 
+              child: Text(widget.title, style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold))
+            ),
           ],
         ),
       ),
