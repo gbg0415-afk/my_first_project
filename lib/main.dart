@@ -9,6 +9,7 @@ import 'package:firebase_auth/firebase_auth.dart' hide User;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 // مكتبات المحرك الجديد
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -105,7 +106,7 @@ class AuthProvider with ChangeNotifier {
 // ==========================================
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  MediaKit.ensureInitialized(); // تهيئة المحرك الجديد
+  MediaKit.ensureInitialized(); 
   await Firebase.initializeApp();
   if (Platform.isAndroid) { try { await ScreenProtector.preventScreenshotOn(); } catch (_) {} }
   runApp(MultiProvider(providers: [ChangeNotifierProvider(create: (_) => AuthProvider())], child: const SMAcademyApp()));
@@ -160,7 +161,16 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(padding: const EdgeInsets.all(16), decoration: const BoxDecoration(color: Color(0xFFF4F7FE), shape: BoxShape.circle), child: const Icon(Icons.school, size: 60, color: Color(0xFF001F3F))),
+                      // اللوجو الجديد
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        child: Image.asset(
+                          'assets/logo.png',
+                          width: 120, height: 120,
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) => const Icon(Icons.school, size: 60, color: Color(0xFF001F3F)),
+                        ),
+                      ),
                       const SizedBox(height: 16),
                       const Text("SM Academy", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Color(0xFF001F3F))),
                       const SizedBox(height: 30),
@@ -274,7 +284,13 @@ class HomeScreen extends StatelessWidget {
                             Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), decoration: BoxDecoration(color: Colors.orangeAccent.withOpacity(0.9), borderRadius: BorderRadius.circular(20)), child: Text(user.departmentName, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12))),
                           ],
                         ),
-                        const CircleAvatar(radius: 25, backgroundColor: Colors.white24, child: Icon(Icons.school, color: Colors.white, size: 28)),
+                        // عرض اللوجو بدل أيقونة المدرسة 
+                        CircleAvatar(
+                          radius: 25, backgroundColor: Colors.white24, 
+                          child: ClipOval(
+                            child: Image.asset('assets/logo.png', width: 50, height: 50, fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => const Icon(Icons.school, color: Colors.white, size: 28)),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -412,7 +428,7 @@ class LectureDetailsScreen extends StatelessWidget {
 }
 
 // ==========================================
-// VIDEO PLAYER SCREEN (مع السرعة والجودة)
+// VIDEO PLAYER SCREEN (Media Kit - HLS, Speed, Quality)
 // ==========================================
 class VideoPlayerScreen extends StatefulWidget {
   final String videoUrl; 
