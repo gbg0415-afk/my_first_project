@@ -65,17 +65,48 @@ class AuthProvider with ChangeNotifier {
   Future<bool> login(String identifier, String password) async {
     _isLoading = true; _error = null; notifyListeners();
     try {
-      String email = identifier.contains('@') ? identifier : "$identifier@smacademy.com";
-      UserCredential cred = await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: password);
+      String loginEmail = identifier;
+      
+      // 1. البحث عن الحساب في قاعدة البيانات باستخدام (الاسم أو الهاتف أو الايميل)
+      final usersRef = FirebaseFirestore.instance.collection('users');
+      QuerySnapshot query = await usersRef.where('phone', isEqualTo: identifier).limit(1).get();
+      if (query.docs.isEmpty) {
+        query = await usersRef.where('email', isEqualTo: identifier).limit(1).get();
+      }
+      if (query.docs.isEmpty) {
+        query = await usersRef.where('name', isEqualTo: identifier).limit(1).get();
+      }
+
+      if (query.docs.isNotEmpty) {
+        // إذا وجدنا الحساب، نأخذ الإيميل المرتبط به للمصادقة مع Firebase
+        loginEmail = query.docs.first.get('email') ?? identifier;
+      } else {
+        // دعم للحسابات القديمة جداً التي تم إنشاؤها بدون إيميل حقيقي
+        if (!identifier.contains('@')) {
+          loginEmail = "$identifier@smacademy.com";
+        }
+      }
+
+      // 2. تسجيل الدخول باستخدام الإيميل المكتشف
+      UserCredential cred = await FirebaseAuth.instance.signInWithEmailAndPassword(email: loginEmail, password: password);
       final userDoc = await FirebaseFirestore.instance.collection('users').doc(cred.user!.uid).get();
+      
       if (userDoc.exists) {
         String savedDeviceId = userDoc.data()?['deviceId'] ?? "";
         String currentDeviceId = await _getDeviceId();
-        if (savedDeviceId != "" && savedDeviceId != currentDeviceId) {
-          await FirebaseAuth.instance.signOut(); _error = "هذا الحساب مرتبط بجهاز آخر. يرجى مراجعة الإدارة.";
-          _isLoading = false; notifyListeners(); return false;
-        } else if (savedDeviceId == "") {
-          await FirebaseFirestore.instance.collection('users').doc(cred.user!.uid).update({'deviceId': currentDeviceId});
+
+        // 3. استثناء حساب مراجعين أبل وجوجل من قفل الجهاز
+        bool isReviewer = (identifier == "07511653766" || identifier == "delyaralo@gmail.com" || loginEmail == "delyaralo@gmail.com");
+
+        if (!isReviewer) {
+          // فحص الجهاز يطبق فقط على الطلاب العاديين
+          if (savedDeviceId != "" && savedDeviceId != currentDeviceId) {
+            await FirebaseAuth.instance.signOut(); 
+            _error = "هذا الحساب مرتبط بجهاز آخر. يرجى مراجعة الإدارة.";
+            _isLoading = false; notifyListeners(); return false;
+          } else if (savedDeviceId == "") {
+            await FirebaseFirestore.instance.collection('users').doc(cred.user!.uid).update({'deviceId': currentDeviceId});
+          }
         }
       }
       await _checkLoginStatus(); _isLoading = false; return true;
@@ -84,18 +115,19 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  Future<bool> register(String name, String phone, String password, String deptId) async {
+  // تعديل دالة التسجيل لتشمل الإيميل
+  Future<bool> register(String name, String phone, String email, String password, String deptId) async {
     _isLoading = true; _error = null; notifyListeners();
     try {
-      String email = "$phone@smacademy.com"; String currentDeviceId = await _getDeviceId();
+      String currentDeviceId = await _getDeviceId();
       UserCredential cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(email: email, password: password);
       await FirebaseFirestore.instance.collection('users').doc(cred.user!.uid).set({
         'uid': cred.user!.uid, 'name': name, 'phone': phone, 'departmentId': deptId,
-        'deviceId': currentDeviceId, 'email': "", 'telegram': "", 'allowedCourseIds': [], 'createdAt': FieldValue.serverTimestamp(),
+        'deviceId': currentDeviceId, 'email': email, 'telegram': "", 'allowedCourseIds': [], 'createdAt': FieldValue.serverTimestamp(),
       });
       await _checkLoginStatus(); _isLoading = false; return true;
     } catch (e) {
-      _error = "فشل التسجيل، قد يكون الرقم مستخدماً"; _isLoading = false; notifyListeners(); return false;
+      _error = "فشل التسجيل، قد يكون الإيميل أو الرقم مستخدماً بالفعل"; _isLoading = false; notifyListeners(); return false;
     }
   }
   void logout() async { await FirebaseAuth.instance.signOut(); _user = null; notifyListeners(); }
@@ -161,7 +193,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // اللوجو الجديد
                       Container(
                         padding: const EdgeInsets.all(16),
                         child: Image.asset(
@@ -175,7 +206,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       const Text("SM Academy", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Color(0xFF001F3F))),
                       const SizedBox(height: 30),
                       if (auth.error != null) Padding(padding: const EdgeInsets.only(bottom: 15), child: Text(auth.error!, style: const TextStyle(color: Colors.red), textAlign: TextAlign.center)),
-                      TextFormField(controller: _idCtrl, decoration: InputDecoration(labelText: "رقم الهاتف", prefixIcon: const Icon(Icons.phone), border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))), validator: (v) => v!.isEmpty ? "مطلوب" : null),
+                      // تعديل التلميح ولوحة المفاتيح
+                      TextFormField(controller: _idCtrl, keyboardType: TextInputType.text, decoration: InputDecoration(labelText: "الهاتف، الإيميل، أو اليوزر", prefixIcon: const Icon(Icons.person), border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))), validator: (v) => v!.isEmpty ? "مطلوب" : null),
                       const SizedBox(height: 16),
                       TextFormField(controller: _passCtrl, obscureText: true, decoration: InputDecoration(labelText: "كلمة المرور", prefixIcon: const Icon(Icons.lock), border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))), validator: (v) => v!.isEmpty ? "مطلوب" : null),
                       const SizedBox(height: 24),
@@ -196,8 +228,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
 class SignupScreen extends StatefulWidget { const SignupScreen({super.key}); @override State<SignupScreen> createState() => _SignupScreenState(); }
 class _SignupScreenState extends State<SignupScreen> {
-  final _nameCtrl = TextEditingController(); final _phoneCtrl = TextEditingController(); final _passCtrl = TextEditingController();
+  final _nameCtrl = TextEditingController(); 
+  final _emailCtrl = TextEditingController(); // حقل الإيميل الجديد
+  final _phoneCtrl = TextEditingController(); 
+  final _passCtrl = TextEditingController();
   String? _selectedDeptId; final _formKey = GlobalKey<FormState>();
+  
   @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
@@ -214,12 +250,20 @@ class _SignupScreenState extends State<SignupScreen> {
               key: _formKey,
               child: Column(
                 children: [
-                  TextFormField(controller: _nameCtrl, decoration: InputDecoration(labelText: "الاسم الكامل", border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))), validator: (v) => v!.isEmpty ? "مطلوب" : null), const SizedBox(height: 16),
+                  TextFormField(controller: _nameCtrl, decoration: InputDecoration(labelText: "الاسم الكامل (اليوزر)", border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))), validator: (v) => v!.isEmpty ? "مطلوب" : null), const SizedBox(height: 16),
                   TextFormField(controller: _phoneCtrl, decoration: InputDecoration(labelText: "رقم الهاتف", border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))), keyboardType: TextInputType.phone, validator: (v) => v!.isEmpty ? "مطلوب" : null), const SizedBox(height: 16),
+                  // إضافة حقل الإيميل للواجهة
+                  TextFormField(controller: _emailCtrl, decoration: InputDecoration(labelText: "البريد الإلكتروني", border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))), keyboardType: TextInputType.emailAddress, validator: (v) => v!.isEmpty || !v.contains('@') ? "يرجى كتابة إيميل صحيح" : null), const SizedBox(height: 16),
                   TextFormField(controller: _passCtrl, obscureText: true, decoration: InputDecoration(labelText: "كلمة المرور", border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))), validator: (v) => v!.isEmpty ? "مطلوب" : null), const SizedBox(height: 16),
                   DropdownButtonFormField<String>(value: _selectedDeptId, hint: const Text("اختر القسم"), decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))), items: departments.map((doc) => DropdownMenuItem(value: doc.id, child: Text((doc.data() as Map)['name'] ?? ''))).toList(), onChanged: (val) => setState(() => _selectedDeptId = val), validator: (v) => v == null ? "مطلوب" : null),
                   const SizedBox(height: 24),
-                  SizedBox(width: double.infinity, height: 50, child: ElevatedButton(onPressed: auth.isLoading ? null : () async { if (_formKey.currentState!.validate() && _selectedDeptId != null) { bool success = await auth.register(_nameCtrl.text, _phoneCtrl.text, _passCtrl.text, _selectedDeptId!); if (success && mounted) Navigator.pop(context); } }, style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF001F3F), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))), child: auth.isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text("إنشاء الحساب", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)))),
+                  SizedBox(width: double.infinity, height: 50, child: ElevatedButton(onPressed: auth.isLoading ? null : () async { 
+                    if (_formKey.currentState!.validate() && _selectedDeptId != null) { 
+                      // تمرير الإيميل لدالة التسجيل
+                      bool success = await auth.register(_nameCtrl.text, _phoneCtrl.text, _emailCtrl.text, _passCtrl.text, _selectedDeptId!); 
+                      if (success && mounted) Navigator.pop(context); 
+                    } 
+                  }, style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF001F3F), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))), child: auth.isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text("إنشاء الحساب", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)))),
                 ],
               ),
             ),
@@ -284,7 +328,6 @@ class HomeScreen extends StatelessWidget {
                             Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), decoration: BoxDecoration(color: Colors.orangeAccent.withOpacity(0.9), borderRadius: BorderRadius.circular(20)), child: Text(user.departmentName, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12))),
                           ],
                         ),
-                        // التعديل الجديد: اللوجو مكبر وتحته اسم الأكاديمية
                         Column(
                           children: [
                             CircleAvatar(
@@ -421,7 +464,20 @@ class LectureDetailsScreen extends StatelessWidget {
                       title: Text(part['title'] ?? 'جزء الفيديو', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                       subtitle: Text(isYoutube ? "يفتح في تطبيق يوتيوب" : "مشاهدة داخل التطبيق", style: TextStyle(fontSize: 11, color: Colors.grey[600])),
                       trailing: Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.play_circle_outline, size: 20, color: Colors.orange)),
-                      onTap: () async { if (isYoutube) { final Uri uri = Uri.parse(url); if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication); } else { Navigator.push(context, MaterialPageRoute(builder: (_) => VideoPlayerScreen(videoUrl: url, title: part['title'] ?? ''))); } },
+                      onTap: () async { 
+                        if (isYoutube) { 
+                          final Uri uri = Uri.parse(url); 
+                          // التعديل هنا لحل مشكلة روابط اليوتيوب في بعض الأجهزة
+                          try {
+                            await launchUrl(uri, mode: LaunchMode.externalApplication);
+                          } catch (e) {
+                            // إذا منع النظام فتح التطبيق الخارجي نفتح المتصفح المدمج داخل التطبيق
+                            await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+                          }
+                        } else { 
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => VideoPlayerScreen(videoUrl: url, title: part['title'] ?? ''))); 
+                        } 
+                      },
                     ),
                   );
                 }).toList(),
